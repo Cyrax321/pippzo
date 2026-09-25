@@ -13,10 +13,7 @@ import type { BrandProfile } from "@/lib/types";
 
 export const Route = createFileRoute("/marca")({
   head: () => ({
-    meta: [
-      { title: "Brand · Social Studio" },
-      { name: "description", content: "Your brand profile." },
-    ],
+    meta: [{ title: "Brand · Pippzo" }, { name: "description", content: "Your brand profile." }],
   }),
   component: MarcaPage,
 });

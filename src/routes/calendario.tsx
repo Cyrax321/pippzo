@@ -25,10 +25,7 @@ import { PostEditor } from "@/components/post-editor";
 
 export const Route = createFileRoute("/calendario")({
   head: () => ({
-    meta: [
-      { title: "Calendar · Social Studio" },
-      { name: "description", content: "Editorial calendar." },
-    ],
+    meta: [{ title: "Calendar · Pippzo" }, { name: "description", content: "Editorial calendar." }],
   }),
   component: CalendarPage,
 });

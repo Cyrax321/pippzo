@@ -27,7 +27,7 @@ import { Plus, Loader2, RefreshCw, Trash2, Sparkles, BarChart3, ExternalLink } f
 export const Route = createFileRoute("/competidores")({
   head: () => ({
     meta: [
-      { title: "Competitors · Social Studio" },
+      { title: "Competitors · Pippzo" },
       { name: "description", content: "Competitive analysis." },
     ],
   }),

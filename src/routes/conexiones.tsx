@@ -60,7 +60,7 @@ import { SectionDisclosure } from "@/components/section-disclosure";
 export const Route = createFileRoute("/conexiones")({
   head: () => ({
     meta: [
-      { title: "Connections · Social Studio" },
+      { title: "Connections · Pippzo" },
       {
         name: "description",
         content:
