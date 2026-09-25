@@ -75,30 +75,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let unsub = () => {};
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      const u = data.session?.user ?? null;
-      setUser(u);
-      if (u) {
-        const ws = await loadWorkspaces(u);
-        let stored: string | null = null;
-        try {
-          stored = localStorage.getItem(ACTIVE_KEY);
-        } catch {
-          /* ignore */
-        }
-        const active = ws.find((w) => w.id === stored)?.id ?? ws[0]?.id ?? null;
-        if (active) setActiveWorkspaceId(active);
-        setStatus("ready");
-      } else {
-        setStatus("anonymous");
-      }
+    let cancelled = false;
 
-      const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
-        const u2 = session?.user ?? null;
-        setUser(u2);
-        if (u2) {
-          const ws = await loadWorkspaces(u2);
+    const settle = (next: "ready" | "anonymous") => {
+      if (!cancelled) setStatus(next);
+    };
+
+    // A session lookup that rejects or never returns must not leave the auth
+    // gate on "loading" forever. Bound the first resolve and always land on a
+    // real state; a late-arriving answer still corrects it above.
+    const timer = setTimeout(() => {
+      console.warn("[workspace] session lookup timed out, treating as anonymous");
+      settle("anonymous");
+    }, 10000);
+
+    (async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) console.error("[workspace] getSession failed", error);
+        const u = data?.session?.user ?? null;
+        setUser(u);
+        if (u) {
+          const ws = await loadWorkspaces(u);
           let stored: string | null = null;
           try {
             stored = localStorage.getItem(ACTIVE_KEY);
@@ -107,19 +105,48 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           }
           const active = ws.find((w) => w.id === stored)?.id ?? ws[0]?.id ?? null;
           if (active) setActiveWorkspaceId(active);
-          setStatus("ready");
+          settle("ready");
         } else {
-          _setActive(null);
-          setWorkspaces([]);
-          brandStore.setWorkspace(null);
-          scheduleStore.setWorkspace(null);
-          competitorsStore.setWorkspace(null);
-          setStatus("anonymous");
+          settle("anonymous");
         }
-      });
-      unsub = () => sub.subscription.unsubscribe();
+
+        const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+          const u2 = session?.user ?? null;
+          setUser(u2);
+          if (u2) {
+            const ws = await loadWorkspaces(u2);
+            let stored: string | null = null;
+            try {
+              stored = localStorage.getItem(ACTIVE_KEY);
+            } catch {
+              /* ignore */
+            }
+            const active = ws.find((w) => w.id === stored)?.id ?? ws[0]?.id ?? null;
+            if (active) setActiveWorkspaceId(active);
+            settle("ready");
+          } else {
+            _setActive(null);
+            setWorkspaces([]);
+            brandStore.setWorkspace(null);
+            scheduleStore.setWorkspace(null);
+            competitorsStore.setWorkspace(null);
+            settle("anonymous");
+          }
+        });
+        unsub = () => sub.subscription.unsubscribe();
+      } catch (e) {
+        console.error("[workspace] session lookup threw", e);
+        settle("anonymous");
+      } finally {
+        clearTimeout(timer);
+      }
     })();
-    return () => unsub();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      unsub();
+    };
   }, []);
 
   return (
