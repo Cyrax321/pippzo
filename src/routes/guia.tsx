@@ -14,7 +14,7 @@ import type { BrandGuideline, ColorSwatch } from "@/lib/types";
 export const Route = createFileRoute("/guia")({
   head: () => ({
     meta: [
-      { title: "Guide · Social Studio" },
+      { title: "Guide · Pippzo" },
       { name: "description", content: "Brand guide and visual identity." },
     ],
   }),
