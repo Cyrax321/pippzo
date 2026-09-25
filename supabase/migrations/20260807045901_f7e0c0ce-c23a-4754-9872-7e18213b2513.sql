@@ -1,0 +1,2 @@
+ALTER TABLE public.cron_jobs DROP CONSTRAINT IF EXISTS cron_jobs_task_type_check;
+ALTER TABLE public.cron_jobs ADD CONSTRAINT cron_jobs_task_type_check CHECK (task_type = ANY (ARRAY['daily_post','competitor_scan','weekly_report','metrics_sync','performance_reflection']));

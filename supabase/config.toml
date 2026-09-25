@@ -1,0 +1,92 @@
+# Local development config for `supabase start`.
+project_id = "social-studio"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.migrations]
+enabled = true
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1"
+
+# Local mail catcher — signup/reset emails land here instead of a real inbox.
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+# Generous enough for the short 9:16 videos the animation/video pipeline produces.
+file_size_limit = "200MiB"
+
+[storage.s3_protocol]
+enabled = true
+
+[auth]
+enabled = true
+# Must match APP_PORT (default 5173, see .env.example and vite.config.ts).
+# The Supabase CLI only supports env() substitution for a fixed list of
+# secret-like fields (OAuth client secrets, SMS provider tokens, etc.) —
+# site_url and additional_redirect_urls are not on that list, so this cannot
+# read APP_PORT and must be kept in sync by hand. If you set APP_PORT to
+# something other than 5173, replace every 5173 below with that port and run
+# `npm run db:stop && npm run db:start` to reload this config. Until you do,
+# signup confirmation, Google sign-in and password-reset links all bounce to
+# whatever is (or isn't) listening on 5173 instead of your dev server.
+site_url = "http://localhost:5173"
+additional_redirect_urls = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:5173/onboarding",
+  "http://127.0.0.1:5173/onboarding",
+  # Password-reset links land back on /auth (see src/routes/auth.tsx), which
+  # detects the recovery token and switches to a "set new password" form.
+  "http://localhost:5173/auth",
+  "http://127.0.0.1:5173/auth",
+]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+enable_anonymous_sign_ins = false
+enable_manual_linking = false
+minimum_password_length = 8
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+# No SMTP locally: confirmations off so signup lands you straight in the app.
+# Any mail that is sent is still viewable at http://127.0.0.1:54324
+enable_confirmations = false
+secure_password_change = false
+max_frequency = "1s"
+
+# Google sign-in is optional locally. To enable it, fill in your own OAuth
+# client, restart Supabase, and set VITE_ENABLE_GOOGLE_AUTH=true in .env —
+# the button on /auth stays hidden until you do.
+# [auth.external.google]
+# enabled = true
+# client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
+# secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
+# redirect_uri = "http://127.0.0.1:54321/auth/v1/callback"
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false

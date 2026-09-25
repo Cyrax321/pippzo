@@ -1,0 +1,1 @@
+ALTER TABLE public.post_metrics ADD COLUMN IF NOT EXISTS media_url text, ADD COLUMN IF NOT EXISTS permalink text;

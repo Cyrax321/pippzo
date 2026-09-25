@@ -1,0 +1,20 @@
+{
+  "brand": {
+    "name": "Meridian Coffee Roasters",
+    "website": "https://example.com",
+    "socials": "LinkedIn (primary) · Instagram",
+    "industry": "Specialty coffee roasting. Direct-trade sourcing, small-batch roasting, wholesale and subscriptions.",
+    "audience": "Coffee-curious professionals aged 25-45 who care where their beans come from, plus cafe owners evaluating wholesale partners. They read labels, value transparency, and are skeptical of marketing fluff.",
+    "products_services": "Single-origin subscriptions (monthly, roasted to order).\nWholesale program for cafes and offices.\nPublic cupping sessions and home-brewing workshops.\nSeasonal blends with published sourcing notes.",
+    "tone_notes": "A roaster who talks like a person, not a label. Plain, warm, specific. Names the farm and the price paid. Never says 'artisanal' or 'curated'. Admits when a batch didn't turn out."
+  },
+  "guide": {
+    "personality": "The knowledgeable friend behind the counter, not the gatekeeping barista. Explains without lecturing. Enthusiastic about details (process, altitude, varietal) but always lands on 'here's why it tastes better'. Honest about trade-offs and prices.",
+    "writing_style": "Short paragraphs of two to four full sentences, separated by a single blank line. Never one sentence per line. Concrete nouns and numbers over adjectives. First person plural ('we roasted', 'we paid'). One idea per post.",
+    "visual_direction": "Natural light, warm neutrals, real hands and real machines. 60% warm cream tones, 30% deep brown, 10% burnt orange accents. No stock photos, no latte-art cliches, no staged marble flatlays."
+  },
+  "competitors": [
+    { "name": "Example Roasting Co", "website": "https://example.org" },
+    { "name": "Demo Beans", "website": "https://example.net" }
+  ]
+}
