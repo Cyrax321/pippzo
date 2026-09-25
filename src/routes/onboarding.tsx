@@ -10,7 +10,7 @@ import { hasLegacyData, importLegacyData } from "@/lib/legacy-import";
 import { useWorkspace } from "@/lib/workspace";
 
 export const Route = createFileRoute("/onboarding")({
-  head: () => ({ meta: [{ title: "Welcome · Social Studio" }] }),
+  head: () => ({ meta: [{ title: "Welcome · Pippzo" }] }),
   component: OnboardingPage,
 });
 

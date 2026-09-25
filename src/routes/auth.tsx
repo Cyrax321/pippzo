@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
-  head: () => ({ meta: [{ title: "Sign in · Social Studio" }] }),
+  head: () => ({ meta: [{ title: "Sign in · Pippzo" }] }),
   component: AuthPage,
 });
 
