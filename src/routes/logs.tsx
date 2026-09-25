@@ -16,7 +16,7 @@ import {
 export const Route = createFileRoute("/logs")({
   head: () => ({
     meta: [
-      { title: "Activity log · Social Studio" },
+      { title: "Activity log · Pippzo" },
       { name: "description", content: "Everything the studio and its agents do." },
     ],
   }),

@@ -112,7 +112,7 @@ function jobTz(j: { config?: Record<string, unknown> | null }, workspaceTz: stri
 export const Route = createFileRoute("/automations")({
   head: () => ({
     meta: [
-      { title: "Automations · Social Studio" },
+      { title: "Automations · Pippzo" },
       { name: "description", content: "Autonomous crons that run in the background." },
     ],
   }),
