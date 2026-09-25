@@ -46,7 +46,7 @@ import {
 export const Route = createFileRoute("/library")({
   head: () => ({
     meta: [
-      { title: "Library · Social Studio" },
+      { title: "Library · Pippzo" },
       {
         name: "description",
         content: "Visual library — upload, generate, and manage images and videos.",

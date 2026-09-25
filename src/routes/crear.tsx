@@ -48,10 +48,7 @@ import { NETWORKS } from "@/lib/buffer-shared";
 
 export const Route = createFileRoute("/crear")({
   head: () => ({
-    meta: [
-      { title: "Create · Social Studio" },
-      { name: "description", content: "Create posts with AI." },
-    ],
+    meta: [{ title: "Create · Pippzo" }, { name: "description", content: "Create posts with AI." }],
   }),
   component: CrearPage,
 });
