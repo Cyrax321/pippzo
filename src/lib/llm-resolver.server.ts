@@ -97,7 +97,8 @@ function buildModel(row: LlmProviderRow, apiKey: string, override?: string): Res
       apiKey,
       ...(row.base_url ? { baseURL: row.base_url } : {}),
     });
-    return { model: openai(modelId), modelId, providerLabel: label };
+    const model = row.base_url ? openai.chat(modelId) : openai(modelId);
+    return { model, modelId, providerLabel: label };
   }
 
   // openai / azure / any OpenAI-compatible endpoint
