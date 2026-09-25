@@ -2,7 +2,7 @@
 
 ## How this app handles secrets
 
-Social Studio is bring-your-own-key by design. Provider API keys (text models, image
+Pippzo is bring-your-own-key by design. Provider API keys (text models, image
 and video models, Buffer, Unipile, Firecrawl, ScrapeCreators, Slack) are
 entered per workspace in the app and stored in your own Postgres, encrypted at
 rest with AES-GCM using `PROVIDER_KEY_SECRET` from your `.env`. The app

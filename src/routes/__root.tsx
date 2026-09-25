@@ -16,6 +16,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { WorkspaceProvider } from "@/lib/workspace";
+import { ChatSessionProvider } from "@/lib/chat-session";
 import { AuthGate } from "@/components/auth-gate";
 
 function NotFoundComponent() {
@@ -69,10 +70,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Social Studio" },
+      { title: "Pippzo" },
       { name: "description", content: "Your Social Media Manager" },
-      { property: "og:title", content: "Social Studio" },
-      { name: "twitter:title", content: "Social Studio" },
+      { property: "og:title", content: "Pippzo" },
+      { name: "twitter:title", content: "Pippzo" },
       { property: "og:description", content: "Your Social Media Manager" },
       { name: "twitter:description", content: "Your Social Media Manager" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -84,7 +85,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap",
       },
     ],
   }),
@@ -111,34 +112,42 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (r) => r.location.pathname });
-  const chromeless = pathname === "/auth" || pathname === "/onboarding";
+  const chromeless =
+    pathname === "/" ||
+    pathname === "/auth" ||
+    pathname === "/onboarding" ||
+    pathname === "/animation";
 
   return (
     <QueryClientProvider client={queryClient}>
       <WorkspaceProvider>
-        <AuthGate>
-          {chromeless ? (
-            <Outlet />
-          ) : (
-            <SidebarProvider>
-              <div className="paper min-h-screen flex w-full bg-background relative">
-                <AppSidebar />
-                <div className="flex-1 flex flex-col min-w-0 relative z-[1]">
-                  <header className="h-12 flex items-center justify-between border-b border-border px-3 sticky top-0 bg-background/85 backdrop-blur z-10">
-                    <div className="flex items-center gap-3">
-                      <SidebarTrigger />
-                      <span className="label-eyebrow hidden sm:inline">{APP_NAME}</span>
-                    </div>
-                  </header>
-                  <main className="flex-1 min-w-0">
-                    <Outlet />
-                  </main>
+        {/* Chat session must live above the route Outlet: an in-flight agent
+            turn keeps running while the user navigates to other pages. */}
+        <ChatSessionProvider>
+          <AuthGate>
+            {chromeless ? (
+              <Outlet />
+            ) : (
+              <SidebarProvider>
+                <div className="paper min-h-screen flex w-full bg-background relative">
+                  <AppSidebar />
+                  <div className="flex-1 flex flex-col min-w-0 relative z-[1]">
+                    <header className="h-12 flex items-center justify-between border-b border-border px-3 sticky top-0 bg-background/85 backdrop-blur z-10">
+                      <div className="flex items-center gap-3">
+                        <SidebarTrigger />
+                        <span className="label-eyebrow hidden sm:inline">{APP_NAME}</span>
+                      </div>
+                    </header>
+                    <main className="flex-1 min-w-0">
+                      <Outlet />
+                    </main>
+                  </div>
                 </div>
-              </div>
-              <Toaster />
-            </SidebarProvider>
-          )}
-        </AuthGate>
+                <Toaster />
+              </SidebarProvider>
+            )}
+          </AuthGate>
+        </ChatSessionProvider>
         <Toaster />
       </WorkspaceProvider>
     </QueryClientProvider>

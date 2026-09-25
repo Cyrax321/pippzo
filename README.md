@@ -1,4 +1,4 @@
-# Social Studio Agent
+# Pippzo
 
 # The AI that learns and improves by itself — fully autonomous.
 
@@ -8,25 +8,25 @@
 
 ### ✦ Create images from your approved brand guidelines
 
-![Create images from approved guidelines](https://raw.githubusercontent.com/RodGutierrezBasualto/social-studio-agent/main/public/demo-images.gif)
+![Create images from approved guidelines](https://raw.githubusercontent.com/Cyrax321/pippzo/main/public/demo-images.gif)
 
 ---
 
 ### ✦ Publish directly to your social media and manage your calendar
 
-![Publish from AI agent and manage calendar](https://raw.githubusercontent.com/RodGutierrezBasualto/social-studio-agent/main/public/demo-publish.gif)
+![Publish from AI agent and manage calendar](https://raw.githubusercontent.com/Cyrax321/pippzo/main/public/demo-publish.gif)
 
 ---
 
 ### ✦ Review performance and save learnings
 
-![Ask about performance and save learnings](https://raw.githubusercontent.com/RodGutierrezBasualto/social-studio-agent/main/public/demo-performance.gif)
+![Ask about performance and save learnings](https://raw.githubusercontent.com/Cyrax321/pippzo/main/public/demo-performance.gif)
 
 ---
 
 ### ✦ Manage DMs and comments automatically
 
-![Manage DMs and comments automatically](https://raw.githubusercontent.com/RodGutierrezBasualto/social-studio-agent/main/public/demo-inbox.gif)
+![Manage DMs and comments automatically](https://raw.githubusercontent.com/Cyrax321/pippzo/main/public/demo-inbox.gif)
 
 ---
 
@@ -75,8 +75,8 @@ Before you start, make sure you have:
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/RodGutierrezBasualto/social-studio-agent.git
-cd social-studio-agent
+git clone https://github.com/Cyrax321/pippzo.git
+cd pippzo
 ```
 
 ### 2. Install dependencies
@@ -252,7 +252,7 @@ npm run cron:uninstall  # removes it
 **Linux** — add this to your crontab (`crontab -e`):
 
 ```
-* * * * * cd /path/to/social-studio-agent && ./scripts/cron-tick.sh
+* * * * * cd /path/to/pippzo && ./scripts/cron-tick.sh
 ```
 
 > Automations only advance while the app is running and your machine is awake — this is the honest limitation of running locally.
