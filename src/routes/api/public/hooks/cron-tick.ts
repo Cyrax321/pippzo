@@ -27,14 +27,21 @@ export const Route = createFileRoute("/api/public/hooks/cron-tick")({
           const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
           const { findAndRunDueJobs } = await import("@/lib/cron-executors.server");
           const { runDueHeartbeats } = await import("@/lib/heartbeat.server");
+          const { findAndPublishDueScheduledPosts } = await import("@/lib/x/x-scheduler.server");
           const out = await findAndRunDueJobs(supabaseAdmin);
+          let duePublishes = { checked: 0, published: 0, failed: 0 };
+          try {
+            duePublishes = await findAndPublishDueScheduledPosts(supabaseAdmin);
+          } catch (e) {
+            console.warn("[cron-tick] due posts publish failed", e);
+          }
           let beats: { heartbeats: number } = { heartbeats: 0 };
           try {
             beats = await runDueHeartbeats(supabaseAdmin);
           } catch (e) {
             console.warn("[cron-tick] heartbeats failed", e);
           }
-          return Response.json({ ...out, ...beats });
+          return Response.json({ ...out, duePublishes, ...beats });
         } catch (e) {
           console.error("[cron-tick] failed", e);
           return new Response(JSON.stringify({ error: "cron_tick_failed" }), {

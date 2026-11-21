@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function SectionDisclosure({
+  id,
   icon,
   title,
   subtitle,
@@ -10,6 +11,7 @@ export function SectionDisclosure({
   defaultOpen = false,
   children,
 }: {
+  id?: string;
   icon: ReactNode;
   title: ReactNode;
   subtitle?: ReactNode;
@@ -18,8 +20,21 @@ export function SectionDisclosure({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+
+  useEffect(() => {
+    if (!id || typeof window === "undefined") return;
+    const checkHash = () => {
+      if (window.location.hash === `#${id}`) {
+        setOpen(true);
+      }
+    };
+    checkHash();
+    window.addEventListener("hashchange", checkHash);
+    return () => window.removeEventListener("hashchange", checkHash);
+  }, [id]);
+
   return (
-    <section className="border border-border">
+    <section id={id} className="border border-border scroll-mt-20">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

@@ -22,6 +22,8 @@ import {
   Link2,
   CheckCircle2,
   AlertTriangle,
+  Info,
+  ExternalLink,
 } from "lucide-react";
 
 export function UnipileSection({ workspaceId }: { workspaceId: string | null }) {
@@ -105,6 +107,7 @@ export function UnipileSection({ workspaceId }: { workspaceId: string | null }) 
 
   return (
     <SectionDisclosure
+      id="unipile-section"
       icon={<MessagesSquare className="h-4 w-4" />}
       title="Engagement (comments & DMs)"
       subtitle="Unipile · bring your own key"
@@ -119,9 +122,44 @@ export function UnipileSection({ workspaceId }: { workspaceId: string | null }) 
       <div className="p-5 space-y-5">
         <p className="text-sm text-muted-foreground">
           Unipile connects your LinkedIn, Instagram and messaging accounts so the agent can read
-          comments and DMs — and reply. Buffer does not expose this over its API. Get an API key and
-          your DSN from unipile.com → Dashboard → Access tokens.
+          comments and DMs — and reply. Buffer does not expose this over its API.
         </p>
+
+        {/* Step-by-step Instructions Box */}
+        <div className="bg-muted/40 border border-border/80 rounded-lg p-4 space-y-3 text-xs">
+          <p className="font-semibold text-foreground text-sm flex items-center gap-1.5">
+            <Info className="h-4 w-4 text-primary" /> How to connect Unipile (Step-by-Step Instructions)
+          </p>
+          <ol className="list-decimal ml-4 space-y-2 text-muted-foreground leading-relaxed">
+            <li>
+              <span className="font-medium text-foreground">Create your Unipile account:</span> Go to{" "}
+              <a
+                href="https://www.unipile.com"
+                target="_blank"
+                rel="noreferrer"
+                className="underline text-foreground font-semibold inline-flex items-center gap-0.5 hover:text-primary"
+              >
+                unipile.com <ExternalLink className="h-3 w-3" />
+              </a>{" "}
+              and sign up for free.
+            </li>
+            <li>
+              <span className="font-medium text-foreground">Find your DSN:</span> In your Unipile dashboard, look under <strong>Account Settings</strong> or <strong>Access Tokens</strong>. Your DSN looks like <code className="bg-background px-1.5 py-0.5 rounded font-mono border text-[11px]">api8.unipile.com:13843</code> (or your assigned cluster host).
+            </li>
+            <li>
+              <span className="font-medium text-foreground">Generate an API Key:</span> In Unipile Dashboard → <strong>Access Tokens</strong>, create a new token and copy the secret key.
+            </li>
+            <li>
+              <span className="font-medium text-foreground">Enter credentials below:</span> Paste your DSN and API key into the inputs below and click <strong>Connect Unipile</strong>.
+            </li>
+            <li>
+              <span className="font-medium text-foreground">Log into your accounts:</span> Return to the top section of this page and click <strong>Log in with LinkedIn</strong>, <strong>Log in with Instagram</strong>, or <strong>Link WhatsApp with QR Code</strong> to authorize your profiles!
+            </li>
+          </ol>
+          <div className="pt-2 text-[11px] text-muted-foreground border-t border-border/50 flex items-center gap-1.5">
+            <span className="font-semibold text-foreground">Note:</span> If you only want to <em>schedule and publish posts or reels</em>, you can simply use <strong>Buffer</strong> at the top without needing Unipile.
+          </div>
+        </div>
 
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />

@@ -55,7 +55,14 @@ import { PlaybooksSection } from "@/components/playbooks-section";
 import { ServiceCredentialsSection } from "@/components/service-credentials-section";
 import { NotificationsSection } from "@/components/notifications-section";
 import { UnipileSection } from "@/components/unipile-section";
+import { XConnectionSection } from "@/components/x-connection-section";
+import { SocialConnectionsSection } from "@/components/social-connections-section";
 import { SectionDisclosure } from "@/components/section-disclosure";
+import { SocialLoginHub } from "@/components/social-login-hub";
+import { getXStatusFn, disconnectXFn } from "@/lib/x/x.functions";
+import type { XConnectionStatus } from "@/lib/x/x.server";
+import { getEngagementConfig } from "@/lib/engagement/engagement.functions";
+import type { EngagementAccountPublic } from "@/lib/engagement/types";
 
 export const Route = createFileRoute("/conexiones")({
   head: () => ({
@@ -179,6 +186,15 @@ function ConexionesPage() {
   const [token, setToken] = useState("");
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+
+  // Social direct login status (X, Unipile)
+  const getXStatus = useServerFn(getXStatusFn);
+  const disconnectX = useServerFn(disconnectXFn);
+  const getUnipileConfig = useServerFn(getEngagementConfig);
+
+  const [xStatus, setXStatus] = useState<XConnectionStatus | null>(null);
+  const [unipileAccounts, setUnipileAccounts] = useState<EngagementAccountPublic[]>([]);
+  const [unipileConnected, setUnipileConnected] = useState(false);
 
   const onSyncMetrics = async () => {
     if (!activeWorkspaceId) return;
@@ -346,8 +362,75 @@ function ConexionesPage() {
     }
   };
 
+  const refreshX = async () => {
+    if (!activeWorkspaceId) return;
+    try {
+      const res = await getXStatus({ data: { workspaceId: activeWorkspaceId } });
+      setXStatus(res);
+    } catch {
+      setXStatus(null);
+    }
+  };
+
+  const refreshUnipile = async () => {
+    if (!activeWorkspaceId) return;
+    try {
+      const res = await getUnipileConfig({ data: { workspaceId: activeWorkspaceId } });
+      setUnipileConnected(res.connected);
+      setUnipileAccounts(res.accounts || []);
+    } catch {
+      setUnipileConnected(false);
+      setUnipileAccounts([]);
+    }
+  };
+
+  const onDisconnectX = async () => {
+    if (!activeWorkspaceId) return;
+    if (!confirm("Disconnect X / Twitter from this workspace?")) return;
+    try {
+      await disconnectX({ data: { workspaceId: activeWorkspaceId } });
+      setXStatus({ connected: false, status: "disconnected" });
+      toast.success("Disconnected from X");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not disconnect X");
+    }
+  };
+
+  const refreshAll = () => {
+    void refresh();
+    void refreshX();
+    void refreshUnipile();
+  };
+
+  // Detect OAuth callback parameters (e.g. ?success=x_connected or ?success=buffer_connected)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const searchParams = new URLSearchParams(window.location.search);
+    const success = searchParams.get("success");
+    const error = searchParams.get("error");
+
+    if (success) {
+      if (success === "x_connected") {
+        toast.success("Successfully connected X (Twitter) account via 1-click login!");
+      } else if (success === "buffer_connected") {
+        toast.success("Successfully connected Buffer account via 1-click login!");
+      } else {
+        toast.success(`Account connected: ${success}`);
+      }
+      refreshAll();
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    } else if (error) {
+      toast.error(`OAuth login failed: ${decodeURIComponent(error)}`);
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+  }, [activeWorkspaceId]);
+
   useEffect(() => {
     void refresh();
+    void refreshX();
+    void refreshUnipile();
     void refreshProviders();
     void refreshImgProviders(); /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [activeWorkspaceId]);
@@ -441,11 +524,41 @@ function ConexionesPage() {
         </p>
       </header>
 
+      {/* 1-Click Social Media Account Login Hub */}
+      <SocialLoginHub
+        workspaceId={activeWorkspaceId}
+        xConnected={Boolean(xStatus?.connected)}
+        xUsername={xStatus?.username}
+        xAvatar={xStatus?.profileImageUrl}
+        onDisconnectX={onDisconnectX}
+        bufferConnected={Boolean(status?.connected)}
+        bufferChannelsCount={status?.channels.length ?? 0}
+        onDisconnectBuffer={onDisconnect}
+        unipileConnected={unipileConnected}
+        linkedAccounts={unipileAccounts.map((a) => ({
+          network: a.network,
+          name: a.name || a.network,
+          status: a.status,
+        }))}
+        onRefresh={refreshAll}
+      />
+
+      <div className="pt-6 border-t border-border/60">
+        <p className="label-eyebrow text-muted-foreground mb-1">Advanced · Manual API Keys & Custom Providers</p>
+        <p className="text-xs text-muted-foreground mb-4">
+          If you prefer using your own developer portal API credentials, bearer tokens, or self-hosted webhook endpoints instead of 1-click account logins, configure them below.
+        </p>
+      </div>
+
+      <SocialConnectionsSection workspaceId={activeWorkspaceId} />
+
       <LlmProvidersSection workspaceId={activeWorkspaceId} />
 
       <ServiceCredentialsSection workspaceId={activeWorkspaceId} />
 
       <UnipileSection workspaceId={activeWorkspaceId} />
+ 
+      <XConnectionSection workspaceId={activeWorkspaceId} />
 
       <NotificationsSection workspaceId={activeWorkspaceId} />
 

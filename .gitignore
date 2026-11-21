@@ -52,3 +52,9 @@ seed/brand.local.json
 # Large demo media — kept locally, never committed (a 157MB file would live in
 # history forever). The compressed GIFs in public/ are the tracked versions.
 public/demo.mp4
+
+# Nested cloned repositories
+social-sdk/
+
+# Supabase Studio local snippets
+supabase/snippets/
