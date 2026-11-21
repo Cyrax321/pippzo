@@ -76,6 +76,10 @@ enable_confirmations = false
 secure_password_change = false
 max_frequency = "1s"
 
+[auth.email.template.recovery]
+subject = "Reset your password - Pippzo"
+content_path = "./supabase/templates/recovery.html"
+
 # Google sign-in is optional locally. To enable it, fill in your own OAuth
 # client, restart Supabase, and set VITE_ENABLE_GOOGLE_AUTH=true in .env —
 # the button on /auth stays hidden until you do.
