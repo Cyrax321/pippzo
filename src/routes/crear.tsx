@@ -9,6 +9,8 @@ import type { SocialPlatformKey, SocialStatusMap } from "@/lib/social/social-typ
 import { SOCIAL_PLATFORM_CONFIG } from "@/lib/social/social-types";
 import { MultiPlatformPublishDialog } from "@/components/multi-platform-publish-dialog";
 import { MultiPlatformScheduleDialog } from "@/components/multi-platform-schedule-dialog";
+import { MediaUploader, type AttachedMedia } from "@/components/media-uploader";
+import { SocialMediaPreviewGallery } from "@/components/social-media-preview-gallery";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -106,7 +108,8 @@ function CrearPage() {
   const [quality, setQuality] = useState<QualityCheck | null>(null);
   const [checking, setChecking] = useState(false);
 
-  // Media
+  // Media & Multi-Media Tray (Postiz-inspired)
+  const [attachedMedia, setAttachedMedia] = useState<AttachedMedia[]>([]);
   const [imgPreview, setImgPreview] = useState<string | null>(null);
   const [imgDesc, setImgDesc] = useState<string | null>(null);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
@@ -186,7 +189,23 @@ function CrearPage() {
       await streamImage(
         "/api/generate-image",
         { prompt, workspaceId: activeWorkspaceId ?? undefined },
-        (dataUrl) => setGeneratedImg(dataUrl),
+        (dataUrl) => {
+          setGeneratedImg(dataUrl);
+          setImgPreview(dataUrl);
+          setAttachedMedia((prev) => {
+            const nonAi = prev.filter((m) => !m.id.startsWith("ai-"));
+            return [
+              ...nonAi,
+              {
+                id: `ai-${Date.now()}`,
+                url: dataUrl,
+                type: "image",
+                name: "AI Generated Visual",
+                altText: post?.visualConcept || editableCaption.slice(0, 80),
+              },
+            ];
+          });
+        },
       );
     } catch (e) {
       console.error(e);
@@ -315,7 +334,10 @@ function CrearPage() {
 
   const currentCaption = editableCaption;
   const captionLen = currentCaption.length;
-  const activeMedia = generatedImg || imgPreview;
+  const activeVideo = attachedMedia.find((m) => m.type === "video");
+  const activeImages = attachedMedia.filter((m) => m.type === "image");
+  const activeMedia = activeVideo?.thumbnailUrl || activeVideo?.url || activeImages[0]?.url || generatedImg || imgPreview;
+  const activeVideoUrl = activeVideo?.url || selectedVideoUrl;
 
   // Selected array
   const selectedList = Array.from(selectedPlatforms);
@@ -566,73 +588,39 @@ function CrearPage() {
             </Button>
           </div>
 
-          {/* Media Attachment */}
+          {/* Media Attachment & Multi-Media Tray (Postiz-inspired) */}
           <div className="space-y-3 border border-border p-4 rounded-xl bg-card">
-            <Label className="text-xs uppercase tracking-wider font-semibold">
-              Media Attachment (Optional)
-            </Label>
-            {activeMedia ? (
-              <div className="relative rounded-lg overflow-hidden border border-border">
-                <img
-                  src={activeMedia}
-                  alt="Post attachment"
-                  className="w-full max-h-56 object-cover"
-                />
-                <button
-                  onClick={() => {
-                    setImgPreview(null);
-                    setGeneratedImg(null);
-                    setImgDesc(null);
-                    setSelectedVideoUrl(null);
-                  }}
-                  className="absolute top-2 right-2 rounded-full bg-background/90 p-1.5 shadow"
-                  aria-label="Remove image"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-                {analyzing && (
-                  <div className="absolute inset-0 grid place-items-center bg-background/60">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => fileRef.current?.click()}
-                  className="text-xs h-9 gap-1.5 justify-center"
-                >
-                  <ImageIcon className="h-3.5 w-3.5" /> Upload
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setLibOpen(true)}
-                  className="text-xs h-9 gap-1.5 justify-center"
-                >
-                  <Library className="h-3.5 w-3.5" /> Library
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={generateImage}
-                  disabled={generatingImg || (!editableCaption && !post)}
-                  className="text-xs h-9 gap-1.5 justify-center"
-                >
-                  {generatingImg ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="h-3.5 w-3.5 text-primary" />
-                  )}
-                  AI Image
-                </Button>
-              </div>
-            )}
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => onFile(e.target.files?.[0])}
+            <MediaUploader
+              media={attachedMedia}
+              onChange={(newMedia) => {
+                setAttachedMedia(newMedia);
+                if (newMedia.length === 0) {
+                  setImgPreview(null);
+                  setGeneratedImg(null);
+                  setImgDesc(null);
+                  setSelectedVideoUrl(null);
+                } else {
+                  const firstImg = newMedia.find((m) => m.type === "image");
+                  if (firstImg) {
+                    setImgPreview(firstImg.url);
+                    // Automatically trigger image analysis if not analyzed yet
+                    if (!imgDesc) {
+                      setAnalyzing(true);
+                      anFn({ data: { dataUrl: firstImg.url, purpose: "post" } })
+                        .then(({ analysis }) => setImgDesc(analysis))
+                        .catch(() => {})
+                        .finally(() => setAnalyzing(false));
+                    }
+                  }
+                  const firstVid = newMedia.find((m) => m.type === "video");
+                  if (firstVid) setSelectedVideoUrl(firstVid.url);
+                }
+              }}
+              onOpenLibrary={() => setLibOpen(true)}
+              onGenerateAiImage={generateImage}
+              generatingAiImage={generatingImg}
+              canGenerateAiImage={Boolean(editableCaption || post)}
+              activePlatform={previewTab}
             />
           </div>
 
@@ -759,11 +747,7 @@ function CrearPage() {
                     {editableCaption || "Your tweet text will appear here..."}
                   </p>
 
-                  {activeMedia && (
-                    <div className="rounded-xl overflow-hidden border border-neutral-200 dark:border-neutral-800 mt-2">
-                      <img src={activeMedia} alt="Preview" className="w-full max-h-60 object-cover" />
-                    </div>
-                  )}
+                  <SocialMediaPreviewGallery media={attachedMedia} fallbackUrl={activeMedia} platform="x" />
 
                   <div className="flex items-center justify-between text-neutral-500 pt-2 border-t border-neutral-100 dark:border-neutral-900 text-xs">
                     <span className="flex items-center gap-1"><MessageCircle className="h-3.5 w-3.5" /> 12</span>
@@ -795,11 +779,7 @@ function CrearPage() {
                     {editableCaption || "Your LinkedIn post copy will appear here..."}
                   </p>
 
-                  {activeMedia && (
-                    <div className="rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-800 mt-2">
-                      <img src={activeMedia} alt="Preview" className="w-full max-h-60 object-cover" />
-                    </div>
-                  )}
+                  <SocialMediaPreviewGallery media={attachedMedia} fallbackUrl={activeMedia} platform="linkedin" />
 
                   <div className="flex items-center justify-between text-neutral-500 pt-2 border-t border-neutral-100 dark:border-neutral-900 text-xs">
                     <span className="flex items-center gap-1"><ThumbsUp className="h-3.5 w-3.5 text-[#0A66C2]" /> Like</span>
@@ -826,16 +806,18 @@ function CrearPage() {
                     <MoreHorizontal className="h-4 w-4 text-neutral-400" />
                   </div>
 
-                  <div className="aspect-video sm:aspect-square bg-muted flex items-center justify-center overflow-hidden">
-                    {activeMedia ? (
-                      <img src={activeMedia} alt="Preview" className="w-full h-full object-cover" />
-                    ) : (
+                  {attachedMedia.length > 0 || activeMedia ? (
+                    <div className="p-3">
+                      <SocialMediaPreviewGallery media={attachedMedia} fallbackUrl={activeMedia} platform="instagram" />
+                    </div>
+                  ) : (
+                    <div className="aspect-video sm:aspect-square bg-muted flex items-center justify-center overflow-hidden">
                       <div className="text-center p-6 text-muted-foreground text-xs">
                         <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
                         <span>Instagram requires an image or video</span>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   <div className="p-3 space-y-2">
                     <div className="flex items-center justify-between text-neutral-600 dark:text-neutral-400">
@@ -875,11 +857,7 @@ function CrearPage() {
                     {editableCaption || "Your Facebook post copy will appear here..."}
                   </p>
 
-                  {activeMedia && (
-                    <div className="rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-800 mt-2">
-                      <img src={activeMedia} alt="Preview" className="w-full max-h-60 object-cover" />
-                    </div>
-                  )}
+                  <SocialMediaPreviewGallery media={attachedMedia} fallbackUrl={activeMedia} platform="facebook" />
 
                   <div className="flex items-center justify-between text-neutral-500 pt-2 border-t border-neutral-100 dark:border-neutral-900 text-xs">
                     <span className="flex items-center gap-1.5"><ThumbsUp className="h-4 w-4 text-[#1877F2]" /> Like</span>
@@ -914,11 +892,7 @@ function CrearPage() {
                     {editableCaption || "Your custom payload or post content will appear here..."}
                   </p>
 
-                  {activeMedia && (
-                    <div className="rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-800 mt-2">
-                      <img src={activeMedia} alt="Preview" className="w-full max-h-60 object-cover" />
-                    </div>
-                  )}
+                  <SocialMediaPreviewGallery media={attachedMedia} fallbackUrl={activeMedia} platform={previewTab} />
 
                   <div className="flex items-center justify-between text-neutral-500 pt-2 border-t border-neutral-100 dark:border-neutral-900 text-xs">
                     <span className="text-[11px] font-mono">Limit: {(statusMap?.[previewTab]?.charLimit || 5000).toLocaleString()} chars</span>
@@ -948,11 +922,23 @@ function CrearPage() {
                   key={img.id}
                   type="button"
                   onClick={() => {
+                    const vidUrl = img.kind === "video" ? (img.videoUrl ?? null) : null;
                     setImgPreview(img.dataUrl);
                     setImgDesc(img.analysis ?? null);
-                    setSelectedVideoUrl(img.kind === "video" ? (img.videoUrl ?? null) : null);
+                    setSelectedVideoUrl(vidUrl);
+                    setAttachedMedia((prev) => [
+                      ...prev,
+                      {
+                        id: `lib-${img.id}-${Date.now()}`,
+                        url: vidUrl || img.dataUrl,
+                        type: img.kind === "video" ? "video" : "image",
+                        name: img.name || "Library Media",
+                        thumbnailUrl: img.kind === "video" ? img.dataUrl : undefined,
+                        altText: img.analysis || undefined,
+                      },
+                    ]);
                     setLibOpen(false);
-                    toast.success("Image selected from library.");
+                    toast.success("Added to post attachments.");
                   }}
                   className="group relative rounded-md overflow-hidden border border-border hover:ring-2 hover:ring-accent transition"
                 >
@@ -978,7 +964,7 @@ function CrearPage() {
         statusMap={statusMap}
         text={editableCaption}
         imageDataUrl={activeMedia}
-        videoUrl={selectedVideoUrl}
+        videoUrl={activeVideoUrl}
         onPublished={() => setSavedSinceGenerate(true)}
       />
 
@@ -991,7 +977,7 @@ function CrearPage() {
         statusMap={statusMap}
         text={editableCaption}
         imageDataUrl={activeMedia}
-        videoUrl={selectedVideoUrl}
+        videoUrl={activeVideoUrl}
         onScheduled={() => setSavedSinceGenerate(true)}
       />
 
