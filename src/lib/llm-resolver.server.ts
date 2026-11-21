@@ -15,7 +15,19 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { LanguageModel } from "ai";
 import { readProviderKey } from "./crypto.server";
 
-export type LlmProviderKind = "openai" | "anthropic" | "google" | "azure" | "openai_compatible";
+export type LlmProviderKind =
+  | "openai"
+  | "anthropic"
+  | "google"
+  | "azure"
+  | "deepseek"
+  | "groq"
+  | "openrouter"
+  | "mistral"
+  | "perplexity"
+  | "ollama"
+  | "custom"
+  | "openai_compatible";
 
 export type LlmProviderRow = {
   id: string;
@@ -45,6 +57,13 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<LlmProviderKind, string> = {
   anthropic: "claude-sonnet-5",
   google: "gemini-2.5-flash",
   azure: "gpt-4.1-mini",
+  deepseek: "deepseek-chat",
+  groq: "llama-3.3-70b-versatile",
+  openrouter: "meta-llama/llama-3.3-70b-instruct",
+  mistral: "mistral-large-latest",
+  perplexity: "sonar-pro",
+  ollama: "llama3.2",
+  custom: "default",
   openai_compatible: "gpt-4.1-mini",
 };
 
@@ -101,21 +120,46 @@ function buildModel(row: LlmProviderRow, apiKey: string, override?: string): Res
     return { model, modelId, providerLabel: label };
   }
 
-  // openai / azure / any OpenAI-compatible endpoint
-  const baseURL = row.base_url?.trim() || undefined;
+  // openai / azure / deepseek / groq / openrouter / mistral / perplexity / ollama / custom
+  let baseURL = row.base_url?.trim() || undefined;
+  if (!baseURL) {
+    if (kind === "deepseek") baseURL = "https://api.deepseek.com";
+    else if (kind === "groq") baseURL = "https://api.groq.com/openai/v1";
+    else if (kind === "openrouter") baseURL = "https://openrouter.ai/api/v1";
+    else if (kind === "mistral") baseURL = "https://api.mistral.ai/v1";
+    else if (kind === "perplexity") baseURL = "https://api.perplexity.ai";
+    else if (kind === "ollama") baseURL = "http://localhost:11434/v1";
+  }
+
   if (!baseURL) {
     throw new NoProviderError(`"${row.label}" needs a base URL before it can be used.`);
   }
+
+  const effectiveApiKey = apiKey || (kind === "ollama" ? "ollama" : "none");
+
   const provider = createOpenAICompatible({
     name: row.provider,
     baseURL,
-    apiKey,
+    apiKey: effectiveApiKey,
     supportsStructuredOutputs: true,
     ...(kind === "azure"
-      ? { queryParams: { "api-version": "2024-12-01-preview" }, headers: { "api-key": apiKey } }
+      ? { queryParams: { "api-version": "2024-12-01-preview" }, headers: { "api-key": effectiveApiKey } }
       : {}),
   });
   return { model: provider(modelId), modelId, providerLabel: label };
+}
+
+export async function resolveModelForRow(
+  row: LlmProviderRow,
+  opts?: { modelOverride?: string },
+): Promise<ResolvedModel> {
+  const apiKey = (await readProviderKey(row)) || (row.provider === "ollama" ? "ollama" : "");
+  if (!apiKey) {
+    throw new NoProviderError(
+      `"${row.label}" has no usable API key saved. Re-enter it in Settings → Connections.`,
+    );
+  }
+  return buildModel(row, apiKey, opts?.modelOverride);
 }
 
 async function loadRow(client: Client, workspaceId: string): Promise<LlmProviderRow | null> {

@@ -45,7 +45,20 @@ const toPublic = (r: Row): LlmProviderPublic => ({
   createdAt: new Date(r.created_at).getTime(),
 });
 
-const ProviderEnum = z.enum(["openai", "anthropic", "google", "azure"]);
+const ProviderEnum = z.enum([
+  "openai",
+  "anthropic",
+  "google",
+  "azure",
+  "deepseek",
+  "groq",
+  "openrouter",
+  "mistral",
+  "perplexity",
+  "ollama",
+  "custom",
+  "openai_compatible",
+]);
 
 // Postgres reports a unique-index violation as SQLSTATE 23505; the Supabase
 // client surfaces it as `error.code`. Used to tell "someone else just won
@@ -98,7 +111,7 @@ export const saveLlmProvider = createServerFn({ method: "POST" })
         workspaceId: z.string().uuid(),
         provider: ProviderEnum,
         label: z.string().min(1).max(100),
-        apiKey: z.string().min(8).max(500),
+        apiKey: z.string().min(1).max(500),
         baseUrl: z.string().url().optional().or(z.literal("")),
         defaultModel: z.string().max(120).optional().or(z.literal("")),
         makeDefault: z.boolean().optional(),
@@ -246,9 +259,9 @@ export const testLlmProvider = createServerFn({ method: "POST" })
       .single();
     if (error || !row) return { ok: false, error: "Provider not found." };
     try {
-      const { resolveChatModel } = await import("./llm-resolver.server");
+      const { resolveModelForRow } = await import("./llm-resolver.server");
       const { generateText } = await import("ai");
-      const { model } = await resolveChatModel(supabase, row.workspace_id);
+      const { model } = await resolveModelForRow(row);
       const { text } = await generateText({
         model,
         prompt: "Reply with the single word: ok",

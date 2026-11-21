@@ -1,5 +1,13 @@
 import { describe, expect, it, beforeEach, afterAll } from "vitest";
-import { clearChatMessages, loadChatMessages, saveChatMessages } from "./chat-history";
+import {
+  clearChatMessages,
+  loadChatMessages,
+  saveChatMessages,
+  createChatSession,
+  listChatSessions,
+  deleteChatSession,
+  renameChatSession,
+} from "./chat-history";
 import type { UIMessage } from "ai";
 
 const WS = "ws-1";
@@ -140,4 +148,84 @@ describe("chat history", () => {
     ]);
     expect(localStorage.getItem("sm.chat.v1:ws-1") ?? "").toContain("base64,AAA");
   });
+
+  it("supports multiple chat sessions with dates and switching", async () => {
+    const {
+      listChatSessions,
+      createChatSession,
+      deleteChatSession,
+      renameChatSession,
+      formatSessionDate,
+      groupSessionsByDate,
+    } = await import("./chat-history");
+
+    // Initially lists sessions
+    const initial = listChatSessions(WS);
+    expect(initial.length).toBeGreaterThanOrEqual(1);
+
+    // Create a new session
+    const s2 = createChatSession(WS, "Marketing Strategy");
+    expect(s2.title).toBe("Marketing Strategy");
+
+    // Save messages to specific session
+    saveChatMessages(WS, [msg("msg-s2", "Strategy outline")], s2.id);
+    const loadedS2 = loadChatMessages(WS, s2.id);
+    expect(loadedS2).toHaveLength(1);
+
+    // Rename session
+    renameChatSession(WS, s2.id, "Growth Marketing 2026");
+    const sessions = listChatSessions(WS);
+    const found = sessions.find((s) => s.id === s2.id);
+    expect(found?.title).toBe("Growth Marketing 2026");
+
+    // Date formatting
+    const formattedDate = formatSessionDate(Date.now());
+    expect(formattedDate).toContain("Today");
+
+    // Date grouping
+    const grouped = groupSessionsByDate(sessions);
+    expect(grouped.length).toBeGreaterThan(0);
+    expect(grouped[0].groupLabel).toBe("Today");
+
+    // Delete session
+    const { remaining } = deleteChatSession(WS, s2.id);
+    expect(remaining.some((s) => s.id === s2.id)).toBe(false);
+  });
+
+  it("preserves separate message histories for distinct sessions without cross-contamination", () => {
+    const s1 = createChatSession(WS, "Chat 1");
+    const s2 = createChatSession(WS, "Chat 2");
+
+    saveChatMessages(WS, [msg("m1", "First conversation")], s1.id);
+    saveChatMessages(WS, [msg("m2", "Second conversation"), msg("m3", "Follow-up")], s2.id);
+
+    const load1 = loadChatMessages(WS, s1.id);
+    const load2 = loadChatMessages(WS, s2.id);
+
+    expect(load1).toHaveLength(1);
+    expect(load1[0].id).toBe("m1");
+
+    expect(load2).toHaveLength(2);
+    expect(load2[0].id).toBe("m2");
+    expect(load2[1].id).toBe("m3");
+
+    // Automatic title derivation updates "New Chat" when user messages are added
+    const s3 = createChatSession(WS, "New Chat");
+    saveChatMessages(
+      WS,
+      [
+        {
+          id: "m4",
+          role: "user",
+          parts: [{ type: "text", text: "What are the latest AI news?" }],
+        } as UIMessage,
+      ],
+      s3.id,
+    );
+    const sessions = listChatSessions(WS);
+    const updatedS3 = sessions.find((s) => s.id === s3.id);
+    expect(updatedS3?.title).toBe("What are the latest AI news?");
+    expect(updatedS3?.messageCount).toBe(1);
+  });
 });
+
