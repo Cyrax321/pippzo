@@ -8,7 +8,7 @@ async function count(db: Client, table: string, workspaceId: string, select: str
 }
 
 export async function getConnectionStatusForAgent(db: Client, workspaceId: string) {
-  const [llm, image, video, services, buffer, unipile, notif, ws] = await Promise.all([
+  const [llm, image, video, services, buffer, unipile, notif, ws, xConn] = await Promise.all([
     count(db, "llm_providers", workspaceId, "provider,label,default_model,is_default"),
     count(db, "image_providers", workspaceId, "provider,label,default_model,is_default"),
     count(db, "video_providers", workspaceId, "provider,label,default_model"),
@@ -24,6 +24,11 @@ export async function getConnectionStatusForAgent(db: Client, workspaceId: strin
       .from("workspaces")
       .select("require_approval,automations_enabled")
       .eq("id", workspaceId)
+      .maybeSingle(),
+    db
+      .from("x_connection")
+      .select("username,name,status,last_synced_at")
+      .eq("workspace_id", workspaceId)
       .maybeSingle(),
   ]);
 
@@ -61,6 +66,14 @@ export async function getConnectionStatusForAgent(db: Client, workspaceId: strin
     })),
     services: services.map((s) => ({ service: s.service, label: s.label })),
     buffer: { connected: channels.length > 0, channels },
+    x: xConn?.data
+      ? {
+          connected: xConn.data.status === "connected",
+          username: xConn.data.username,
+          name: xConn.data.name,
+          lastSyncedAt: xConn.data.last_synced_at,
+        }
+      : { connected: false },
     engagementAccounts: unipile.map((a) => ({
       provider: a.provider,
       network: a.network,

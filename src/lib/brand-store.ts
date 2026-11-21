@@ -185,7 +185,7 @@ async function hydrate(force = false) {
         return;
       }
       cacheProfile = pRes.data ? rowToProfile(pRes.data as ProfileRow) : null;
-      cacheGuideline = gRes.data ? rowToGuideline(gRes.data as GuidelineRow) : null;
+      cacheGuideline = gRes.data ? rowToGuideline(gRes.data as unknown as GuidelineRow) : null;
       cacheImages = (iRes.data as ImageRow[] | null)?.map(rowToImage) ?? [];
       hydratedForWorkspace = ws;
       emit();
@@ -211,7 +211,7 @@ async function persistGuideline(g: BrandGuideline) {
   if (!workspaceId) return;
   const { error } = await supabase
     .from("brand_guideline")
-    .upsert(guidelineToRow(workspaceId, g), { onConflict: "workspace_id" });
+    .upsert(guidelineToRow(workspaceId, g) as any, { onConflict: "workspace_id" });
   if (error) {
     console.error("[brand] persist guideline failed", error);
     toast.error("Could not save guide");

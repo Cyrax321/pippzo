@@ -19,6 +19,7 @@ import { Route as ChatRouteImport } from './routes/chat'
 import { Route as CompetidoresRouteImport } from './routes/competidores'
 import { Route as ConexionesRouteImport } from './routes/conexiones'
 import { Route as CrearRouteImport } from './routes/crear'
+import { Route as FeedbackRouteImport } from './routes/feedback'
 import { Route as GuiaRouteImport } from './routes/guia'
 import { Route as ImagenesRouteImport } from './routes/imagenes'
 import { Route as InboxRouteImport } from './routes/inbox'
@@ -29,6 +30,9 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiGenerateImageRouteImport } from './routes/api/generate-image'
+import { Route as ApiPublicResolveIdentifierRouteImport } from './routes/api/public/resolve-identifier'
+import { Route as ApiOauthBufferCallbackRouteImport } from './routes/api/oauth/buffer/callback'
+import { Route as ApiOauthXCallbackRouteImport } from './routes/api/oauth/x/callback'
 import { Route as ApiPublicHooksCronTickRouteImport } from './routes/api/public/hooks/cron-tick'
 import { Route as ApiPublicHooksUnipileRouteImport } from './routes/api/public/hooks/unipile'
 import { Route as ApiPublicMediaSplatRouteImport } from './routes/api/public/media/$'
@@ -83,6 +87,11 @@ const CrearRoute = CrearRouteImport.update({
   path: '/crear',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FeedbackRoute = FeedbackRouteImport.update({
+  id: '/feedback',
+  path: '/feedback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GuiaRoute = GuiaRouteImport.update({
   id: '/guia',
   path: '/guia',
@@ -133,6 +142,22 @@ const ApiGenerateImageRoute = ApiGenerateImageRouteImport.update({
   path: '/api/generate-image',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicResolveIdentifierRoute =
+  ApiPublicResolveIdentifierRouteImport.update({
+    id: '/api/public/resolve-identifier',
+    path: '/api/public/resolve-identifier',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiOauthBufferCallbackRoute = ApiOauthBufferCallbackRouteImport.update({
+  id: '/api/oauth/buffer/callback',
+  path: '/api/oauth/buffer/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiOauthXCallbackRoute = ApiOauthXCallbackRouteImport.update({
+  id: '/api/oauth/x/callback',
+  path: '/api/oauth/x/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHooksCronTickRoute = ApiPublicHooksCronTickRouteImport.update({
   id: '/api/public/hooks/cron-tick',
   path: '/api/public/hooks/cron-tick',
@@ -160,6 +185,7 @@ export interface FileRoutesByFullPath {
   '/competidores': typeof CompetidoresRoute
   '/conexiones': typeof ConexionesRoute
   '/crear': typeof CrearRoute
+  '/feedback': typeof FeedbackRoute
   '/guia': typeof GuiaRoute
   '/imagenes': typeof ImagenesRoute
   '/inbox': typeof InboxRoute
@@ -170,6 +196,9 @@ export interface FileRoutesByFullPath {
   '/reports': typeof ReportsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/generate-image': typeof ApiGenerateImageRoute
+  '/api/public/resolve-identifier': typeof ApiPublicResolveIdentifierRoute
+  '/api/oauth/buffer/callback': typeof ApiOauthBufferCallbackRoute
+  '/api/oauth/x/callback': typeof ApiOauthXCallbackRoute
   '/api/public/hooks/cron-tick': typeof ApiPublicHooksCronTickRoute
   '/api/public/hooks/unipile': typeof ApiPublicHooksUnipileRoute
   '/api/public/media/$': typeof ApiPublicMediaSplatRoute
@@ -185,6 +214,7 @@ export interface FileRoutesByTo {
   '/competidores': typeof CompetidoresRoute
   '/conexiones': typeof ConexionesRoute
   '/crear': typeof CrearRoute
+  '/feedback': typeof FeedbackRoute
   '/guia': typeof GuiaRoute
   '/imagenes': typeof ImagenesRoute
   '/inbox': typeof InboxRoute
@@ -195,6 +225,9 @@ export interface FileRoutesByTo {
   '/reports': typeof ReportsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/generate-image': typeof ApiGenerateImageRoute
+  '/api/public/resolve-identifier': typeof ApiPublicResolveIdentifierRoute
+  '/api/oauth/buffer/callback': typeof ApiOauthBufferCallbackRoute
+  '/api/oauth/x/callback': typeof ApiOauthXCallbackRoute
   '/api/public/hooks/cron-tick': typeof ApiPublicHooksCronTickRoute
   '/api/public/hooks/unipile': typeof ApiPublicHooksUnipileRoute
   '/api/public/media/$': typeof ApiPublicMediaSplatRoute
@@ -211,6 +244,7 @@ export interface FileRoutesById {
   '/competidores': typeof CompetidoresRoute
   '/conexiones': typeof ConexionesRoute
   '/crear': typeof CrearRoute
+  '/feedback': typeof FeedbackRoute
   '/guia': typeof GuiaRoute
   '/imagenes': typeof ImagenesRoute
   '/inbox': typeof InboxRoute
@@ -221,6 +255,9 @@ export interface FileRoutesById {
   '/reports': typeof ReportsRoute
   '/api/chat': typeof ApiChatRoute
   '/api/generate-image': typeof ApiGenerateImageRoute
+  '/api/public/resolve-identifier': typeof ApiPublicResolveIdentifierRoute
+  '/api/oauth/buffer/callback': typeof ApiOauthBufferCallbackRoute
+  '/api/oauth/x/callback': typeof ApiOauthXCallbackRoute
   '/api/public/hooks/cron-tick': typeof ApiPublicHooksCronTickRoute
   '/api/public/hooks/unipile': typeof ApiPublicHooksUnipileRoute
   '/api/public/media/$': typeof ApiPublicMediaSplatRoute
@@ -238,6 +275,7 @@ export interface FileRouteTypes {
     | '/competidores'
     | '/conexiones'
     | '/crear'
+    | '/feedback'
     | '/guia'
     | '/imagenes'
     | '/inbox'
@@ -248,6 +286,9 @@ export interface FileRouteTypes {
     | '/reports'
     | '/api/chat'
     | '/api/generate-image'
+    | '/api/public/resolve-identifier'
+    | '/api/oauth/buffer/callback'
+    | '/api/oauth/x/callback'
     | '/api/public/hooks/cron-tick'
     | '/api/public/hooks/unipile'
     | '/api/public/media/$'
@@ -263,6 +304,7 @@ export interface FileRouteTypes {
     | '/competidores'
     | '/conexiones'
     | '/crear'
+    | '/feedback'
     | '/guia'
     | '/imagenes'
     | '/inbox'
@@ -273,6 +315,9 @@ export interface FileRouteTypes {
     | '/reports'
     | '/api/chat'
     | '/api/generate-image'
+    | '/api/public/resolve-identifier'
+    | '/api/oauth/buffer/callback'
+    | '/api/oauth/x/callback'
     | '/api/public/hooks/cron-tick'
     | '/api/public/hooks/unipile'
     | '/api/public/media/$'
@@ -288,6 +333,7 @@ export interface FileRouteTypes {
     | '/competidores'
     | '/conexiones'
     | '/crear'
+    | '/feedback'
     | '/guia'
     | '/imagenes'
     | '/inbox'
@@ -298,6 +344,9 @@ export interface FileRouteTypes {
     | '/reports'
     | '/api/chat'
     | '/api/generate-image'
+    | '/api/public/resolve-identifier'
+    | '/api/oauth/buffer/callback'
+    | '/api/oauth/x/callback'
     | '/api/public/hooks/cron-tick'
     | '/api/public/hooks/unipile'
     | '/api/public/media/$'
@@ -314,6 +363,7 @@ export interface RootRouteChildren {
   CompetidoresRoute: typeof CompetidoresRoute
   ConexionesRoute: typeof ConexionesRoute
   CrearRoute: typeof CrearRoute
+  FeedbackRoute: typeof FeedbackRoute
   GuiaRoute: typeof GuiaRoute
   ImagenesRoute: typeof ImagenesRoute
   InboxRoute: typeof InboxRoute
@@ -324,6 +374,9 @@ export interface RootRouteChildren {
   ReportsRoute: typeof ReportsRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiGenerateImageRoute: typeof ApiGenerateImageRoute
+  ApiPublicResolveIdentifierRoute: typeof ApiPublicResolveIdentifierRoute
+  ApiOauthBufferCallbackRoute: typeof ApiOauthBufferCallbackRoute
+  ApiOauthXCallbackRoute: typeof ApiOauthXCallbackRoute
   ApiPublicHooksCronTickRoute: typeof ApiPublicHooksCronTickRoute
   ApiPublicHooksUnipileRoute: typeof ApiPublicHooksUnipileRoute
   ApiPublicMediaSplatRoute: typeof ApiPublicMediaSplatRoute
@@ -401,6 +454,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CrearRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/feedback': {
+      id: '/feedback'
+      path: '/feedback'
+      fullPath: '/feedback'
+      preLoaderRoute: typeof FeedbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/guia': {
       id: '/guia'
       path: '/guia'
@@ -471,6 +531,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGenerateImageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/resolve-identifier': {
+      id: '/api/public/resolve-identifier'
+      path: '/api/public/resolve-identifier'
+      fullPath: '/api/public/resolve-identifier'
+      preLoaderRoute: typeof ApiPublicResolveIdentifierRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/oauth/buffer/callback': {
+      id: '/api/oauth/buffer/callback'
+      path: '/api/oauth/buffer/callback'
+      fullPath: '/api/oauth/buffer/callback'
+      preLoaderRoute: typeof ApiOauthBufferCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/oauth/x/callback': {
+      id: '/api/oauth/x/callback'
+      path: '/api/oauth/x/callback'
+      fullPath: '/api/oauth/x/callback'
+      preLoaderRoute: typeof ApiOauthXCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/cron-tick': {
       id: '/api/public/hooks/cron-tick'
       path: '/api/public/hooks/cron-tick'
@@ -506,6 +587,7 @@ const rootRouteChildren: RootRouteChildren = {
   CompetidoresRoute: CompetidoresRoute,
   ConexionesRoute: ConexionesRoute,
   CrearRoute: CrearRoute,
+  FeedbackRoute: FeedbackRoute,
   GuiaRoute: GuiaRoute,
   ImagenesRoute: ImagenesRoute,
   InboxRoute: InboxRoute,
@@ -516,6 +598,9 @@ const rootRouteChildren: RootRouteChildren = {
   ReportsRoute: ReportsRoute,
   ApiChatRoute: ApiChatRoute,
   ApiGenerateImageRoute: ApiGenerateImageRoute,
+  ApiPublicResolveIdentifierRoute: ApiPublicResolveIdentifierRoute,
+  ApiOauthBufferCallbackRoute: ApiOauthBufferCallbackRoute,
+  ApiOauthXCallbackRoute: ApiOauthXCallbackRoute,
   ApiPublicHooksCronTickRoute: ApiPublicHooksCronTickRoute,
   ApiPublicHooksUnipileRoute: ApiPublicHooksUnipileRoute,
   ApiPublicMediaSplatRoute: ApiPublicMediaSplatRoute,

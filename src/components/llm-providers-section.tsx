@@ -54,6 +54,7 @@ export function LlmProvidersSection({ workspaceId }: { workspaceId: string | nul
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
   const [form, setForm] = useState(empty);
+  const [showCustomUrl, setShowCustomUrl] = useState(false);
 
   const load = useCallback(() => {
     if (!workspaceId) return;
@@ -79,18 +80,24 @@ export function LlmProvidersSection({ workspaceId }: { workspaceId: string | nul
     if (!workspaceId) return;
     setSaving(true);
     try {
+      let cleanBase = form.baseUrl.trim().replace(/\/+$/, "");
+      if (cleanBase && !cleanBase.startsWith("http://") && !cleanBase.startsWith("https://")) {
+        cleanBase = `https://${cleanBase}`;
+      }
+
       const p = await save({
         data: {
           workspaceId,
           provider: form.provider,
-          label: form.label.trim(),
+          label: form.label.trim() || opt.label,
           apiKey: form.apiKey.trim(),
-          baseUrl: form.baseUrl.trim().replace(/\/+$/, ""),
+          baseUrl: cleanBase,
           defaultModel: form.defaultModel.trim() || opt.models[0]?.id || "",
         },
       });
       setProviders((cur) => [p, ...cur.map((x) => (p.isDefault ? { ...x, isDefault: false } : x))]);
       setForm(empty);
+      setShowCustomUrl(false);
       toast.success("Text model connected");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
@@ -122,8 +129,8 @@ export function LlmProvidersSection({ workspaceId }: { workspaceId: string | nul
         <p className="text-sm text-muted-foreground">
           Every chat reply, generated post, competitor report and autonomous run uses this model.
           There is no shared fallback account: you pay your provider directly, and nothing leaves
-          your own account. Until a model is connected here, the agent will say so rather than
-          guess.
+          your own account. You can connect OpenAI, Anthropic, Google, Azure, or any custom API /
+          OpenAI-compatible provider (DeepSeek, Groq, OpenRouter, Mistral, Perplexity, Ollama, Together AI, etc.).
         </p>
 
         {loading ? (
@@ -214,11 +221,15 @@ export function LlmProvidersSection({ workspaceId }: { workspaceId: string | nul
               value={form.provider}
               onValueChange={(v) => {
                 const kind = v as LlmProviderKindPublic;
+                const providerCfg = catalogProvider(kind);
                 setForm((c) => ({
                   ...c,
                   provider: kind,
-                  baseUrl: "",
-                  defaultModel: DEFAULT_MODEL_ID[kind],
+                  label: c.label ? c.label : providerCfg.label,
+                  baseUrl: providerCfg.requiresBaseUrl && providerCfg.baseUrlPlaceholder?.startsWith("http")
+                    ? providerCfg.baseUrlPlaceholder
+                    : "",
+                  defaultModel: DEFAULT_MODEL_ID[kind] || "",
                 }));
               }}
             >
@@ -240,18 +251,35 @@ export function LlmProvidersSection({ workspaceId }: { workspaceId: string | nul
             <Input
               value={form.label}
               onChange={(e) => setForm({ ...form, label: e.target.value })}
-              placeholder="My OpenAI account"
+              placeholder={opt.label || "My AI Account"}
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">{opt.freeformModel ? "Deployment name" : "Model"}</Label>
+            <Label className="text-xs">{opt.freeformModel ? "Model ID / Name" : "Model"}</Label>
             {opt.freeformModel ? (
-              <Input
-                value={form.defaultModel}
-                onChange={(e) => setForm({ ...form, defaultModel: e.target.value })}
-                placeholder="gpt-5.4"
-                className="font-mono"
-              />
+              <div className="space-y-1.5">
+                <Input
+                  value={form.defaultModel}
+                  onChange={(e) => setForm({ ...form, defaultModel: e.target.value })}
+                  placeholder={opt.models[0]?.id || "e.g. meta-llama/Llama-3-70b"}
+                  className="font-mono text-xs"
+                />
+                {opt.models.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    <span className="text-[10px] text-muted-foreground self-center">Popular:</span>
+                    {opt.models.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setForm((c) => ({ ...c, defaultModel: m.id }))}
+                        className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-muted/40 hover:bg-muted font-mono transition-colors"
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             ) : (
               <Select
                 value={form.defaultModel}
@@ -271,9 +299,9 @@ export function LlmProvidersSection({ workspaceId }: { workspaceId: string | nul
             )}
             <p className="text-[11px] text-muted-foreground">{opt.modelHelp ?? modelOpt?.hint}</p>
           </div>
-          {opt.requiresBaseUrl && (
+          {opt.requiresBaseUrl ? (
             <div className="space-y-1.5 sm:col-span-2">
-              <Label className="text-xs">Endpoint</Label>
+              <Label className="text-xs">Endpoint URL <span className="text-destructive">*</span></Label>
               <Input
                 value={form.baseUrl}
                 onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
@@ -282,14 +310,37 @@ export function LlmProvidersSection({ workspaceId }: { workspaceId: string | nul
               />
               <p className="text-[11px] text-muted-foreground">{opt.baseUrlHelp}</p>
             </div>
+          ) : (
+            <div className="space-y-1.5 sm:col-span-2">
+              <button
+                type="button"
+                onClick={() => setShowCustomUrl((v) => !v)}
+                className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1"
+              >
+                {showCustomUrl ? "− Hide custom endpoint override" : "+ Custom endpoint URL override (optional)"}
+              </button>
+              {showCustomUrl && (
+                <div className="space-y-1 pt-1">
+                  <Input
+                    value={form.baseUrl}
+                    onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
+                    placeholder={opt.baseUrlPlaceholder || "https://..."}
+                    className="font-mono text-xs"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Leave blank to use default ({opt.baseUrlPlaceholder || "provider official endpoint"}).
+                  </p>
+                </div>
+              )}
+            </div>
           )}
           <div className="space-y-1.5 sm:col-span-2">
-            <Label className="text-xs">API key</Label>
+            <Label className="text-xs">API key / Token</Label>
             <Input
               type="password"
               value={form.apiKey}
               onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-              placeholder="Paste key"
+              placeholder="Paste API key or Bearer token"
               className="font-mono"
             />
             <p className="text-[11px] text-muted-foreground">{opt.keyHelp}. Encrypted at rest.</p>
@@ -297,7 +348,7 @@ export function LlmProvidersSection({ workspaceId }: { workspaceId: string | nul
         </div>
 
         <Button onClick={onAdd} disabled={saving || !workspaceId || incomplete} className="gap-2">
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}{" "}
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
           Connect model
         </Button>
       </div>

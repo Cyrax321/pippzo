@@ -302,13 +302,48 @@ Return a JSON post ready to publish. Concrete, specific, on brand.`,
   // failed forever with every dashboard green.
   let publishNote: string | null = null;
   if (!requiresApproval) {
-    const pub = await publishScheduledPostToBuffer(admin, job.workspace_id, {
-      id: scheduledPostId,
-      platform,
-      caption: output.caption,
-      imageUrl,
-      scheduledAtISO: scheduledAt,
-    });
+    let handledByX = false;
+    if (platform === "x" || (platform as string) === "twitter") {
+      try {
+        const { getXConnection, publishTweet } = await import("@/lib/x/x.server");
+        const xConn = await getXConnection(admin, job.workspace_id);
+        if (xConn.row?.status === "connected") {
+          handledByX = true;
+          const tags = (output.hashtags || []).map((t: string) => (t.startsWith("#") ? t : `#${t}`)).join(" ");
+          const fullText = [output.caption.trim(), output.cta?.trim(), tags].filter(Boolean).join("\n\n");
+          const xRes = await publishTweet(admin, job.workspace_id, {
+            text: fullText,
+            mediaUrls: imageUrl ? [imageUrl] : [],
+          });
+          if (xRes.ok && xRes.tweetId) {
+            await markPublishOutcome(admin, scheduledPostId, "published");
+            await admin
+              .from("scheduled_posts")
+              .update({
+                x_post_id: xRes.tweetId,
+                x_posted_at: new Date().toISOString(),
+                buffer_id: xRes.tweetId,
+              })
+              .eq("id", scheduledPostId);
+            publishNote = `published directly to X (@${xConn.row.username}) — ${xRes.url}`;
+          } else {
+            await markPublishOutcome(admin, scheduledPostId, "publish_failed");
+            throw new Error(`Direct X publish failed: ${xRes.error || "Unknown X API error"}`);
+          }
+        }
+      } catch (err) {
+        if (handledByX) throw err;
+      }
+    }
+
+    if (!handledByX) {
+      const pub = await publishScheduledPostToBuffer(admin, job.workspace_id, {
+        id: scheduledPostId,
+        platform,
+        caption: output.caption,
+        imageUrl,
+        scheduledAtISO: scheduledAt,
+      });
 
     if (!pub.ok) {
       // Three different things can be true here and they need three different
@@ -345,8 +380,9 @@ Return a JSON post ready to publish. Concrete, specific, on brand.`,
 
     // ok:true with an error set means it published with a caveat (e.g. an
     // image it could not host was dropped) — a note, not a failure.
-    await markPublishOutcome(admin, scheduledPostId, "published");
-    publishNote = `published to Buffer (${pub.channelName ?? pub.channelId ?? "channel"})${pub.error ? ` — ${pub.error}` : ""}`;
+      await markPublishOutcome(admin, scheduledPostId, "published");
+      publishNote = `published to Buffer (${pub.channelName ?? pub.channelId ?? "channel"})${pub.error ? ` — ${pub.error}` : ""}`;
+    }
   }
 
   const notes = [imageNote, publishNote].filter(Boolean).join("; ");

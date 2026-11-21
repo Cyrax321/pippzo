@@ -32,7 +32,18 @@ import { capturePosterFromUrl } from "@/lib/video-poster";
 import { toast } from "sonner";
 import type { Platform, BrandImage } from "@/lib/types";
 import { useWorkspace } from "@/lib/workspace";
-import { loadChatMessages, saveChatMessages } from "@/lib/chat-history";
+import {
+  loadChatMessages,
+  saveChatMessages,
+  listChatSessions,
+  getActiveSessionId,
+  setActiveSessionId,
+  createChatSession,
+  deleteChatSession,
+  deleteAllChatSessions,
+  renameChatSession,
+  type ChatSessionMeta,
+} from "@/lib/chat-history";
 import { logActivityFn } from "@/lib/activity-log";
 
 export type ScheduleArgs = {
@@ -90,15 +101,49 @@ function snapshot(items: ScheduledPost[]) {
 
 export type ChatSessionValue = Pick<
   UseChatHelpers<UIMessage>,
-  "messages" | "setMessages" | "sendMessage" | "status"
+  "messages" | "setMessages" | "sendMessage" | "status" | "stop"
 > & {
   imageFrames: Record<string, { dataUrl: string; final: boolean }>;
   videoJobs: Record<string, { label: string; progress?: number }>;
   imageStashRef: { current: Map<string, string> };
   videoStashRef: { current: Map<string, string> };
   buffer: BufferStatus | null;
+  activeSessionId: string;
+  sessions: ChatSessionMeta[];
+  createSession: (title?: string) => string;
+  switchSession: (sessionId: string) => void;
+  deleteSession: (sessionId: string) => void;
+  deleteAllSessions: () => void;
+  renameSession: (sessionId: string, title: string) => void;
+  reloadSessions: () => void;
 };
 
+/** Internal context shared between the outer shell and ChatCore. */
+type ShellContext = {
+  activeWorkspaceId: string | null;
+  activeSessionId: string;
+  sessions: ChatSessionMeta[];
+  setSessions: (s: ChatSessionMeta[]) => void;
+  setActiveSessionId: (id: string) => void;
+  buffer: BufferStatus | null;
+  imageStashRef: { current: Map<string, string> };
+  videoStashRef: { current: Map<string, string> };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  transport: any;
+  itemsRef: { current: ReturnType<typeof useScheduledPosts> };
+  bufferRef: { current: BufferStatus | null };
+  wsRef: { current: string | null };
+  libraryRef: { current: BrandImage[] };
+  bufferCreate: ReturnType<typeof useServerFn<typeof bufferCreatePost>>;
+  bufferDelete: ReturnType<typeof useServerFn<typeof bufferDeletePost>>;
+  analyzeCompetitorFn: ReturnType<typeof useServerFn<typeof scanCompetitorV2>>;
+  videoProvidersFn: ReturnType<typeof useServerFn<typeof listVideoProviders>>;
+  startVideoFn: ReturnType<typeof useServerFn<typeof startVideoGeneration>>;
+  pollVideoFn: ReturnType<typeof useServerFn<typeof pollVideoGeneration>>;
+  assembleCarouselFn: ReturnType<typeof useServerFn<typeof bufferAssembleCarousel>>;
+};
+
+const ShellCtx = createContext<ShellContext | null>(null);
 const ChatSessionContext = createContext<ChatSessionValue | null>(null);
 
 export function useChatSession(): ChatSessionValue {
@@ -112,6 +157,14 @@ export function useChatSession(): ChatSessionValue {
 // /chat route component, leaving the page destroyed the hook: an in-flight
 // stream aborted, client tool calls (image/video generation, scheduling)
 // died mid-run, and the unsaved turn vanished from localStorage history.
+//
+// ARCHITECTURE: ChatSessionProvider is split into two layers:
+//   1. ChatSessionProvider (outer) — owns session list, active id, buffer, refs.
+//      This stays mounted across the entire app lifetime.
+//   2. ChatCore (inner) — owns useChat, keyed by activeSessionId.
+//      The `key` forces a clean useChat remount when the user switches sessions,
+//      which is the only reliable way to load a different session's messages
+//      because useChat only reads its `messages` prop on initial mount.
 export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const { activeWorkspaceId } = useWorkspace();
   const items = useScheduledPosts();
@@ -126,20 +179,12 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   const startVideoFn = useServerFn(startVideoGeneration);
   const pollVideoFn = useServerFn(pollVideoGeneration);
   const assembleCarouselFn = useServerFn(bufferAssembleCarousel);
+
   // Stash generated + library images by id so the agent can reference them by id.
   const imageStashRef = useRef<Map<string, string>>(new Map());
   // For library video assets, keep the signed video URL alongside the poster
   // so passing a library imageId can also carry a videoUrl to Buffer.
   const videoStashRef = useRef<Map<string, string>>(new Map());
-  // For UI: re-render image previews as partial frames arrive.
-  const [imageFrames, setImageFrames] = useState<
-    Record<string, { dataUrl: string; final: boolean }>
-  >({});
-  // Per-toolCall video render progress, keyed by toolCallId so the chat card can
-  // show "Rendering… N%" while the (minutes-long) client tool is still running.
-  const [videoJobs, setVideoJobs] = useState<Record<string, { label: string; progress?: number }>>(
-    {},
-  );
 
   // Keep library images available in the stash so the agent can pass a
   // library id straight into schedulePost.imageId or generateImage.referenceImageIds.
@@ -171,9 +216,9 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
   itemsRef.current = items;
   const bufferRef = useRef(buffer);
   bufferRef.current = buffer;
-
   const wsRef = useRef(activeWorkspaceId);
   wsRef.current = activeWorkspaceId;
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -213,15 +258,106 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const restoredMessages = useMemo(() => loadChatMessages(activeWorkspaceId), [activeWorkspaceId]);
+  const [activeSessionId, setActiveSessionIdState] = useState<string>(() =>
+    getActiveSessionId(activeWorkspaceId),
+  );
+  const [sessions, setSessions] = useState<ChatSessionMeta[]>(() =>
+    listChatSessions(activeWorkspaceId),
+  );
 
-  const { messages, setMessages, sendMessage, status, addToolResult } = useChat({
-    ...(activeWorkspaceId ? { id: `pippzo-${activeWorkspaceId}` } : {}),
-    messages: restoredMessages,
+  useEffect(() => {
+    const curActive = getActiveSessionId(activeWorkspaceId);
+    setActiveSessionIdState(curActive);
+    setSessions(listChatSessions(activeWorkspaceId));
+  }, [activeWorkspaceId]);
+
+  const handleSetActiveSessionId = (id: string) => {
+    setActiveSessionId(activeWorkspaceId, id);
+    setActiveSessionIdState(id);
+  };
+
+  const shellValue = useMemo<ShellContext>(
+    () => ({
+      activeWorkspaceId,
+      activeSessionId,
+      sessions,
+      setSessions,
+      setActiveSessionId: handleSetActiveSessionId,
+      buffer,
+      imageStashRef,
+      videoStashRef,
+      transport,
+      itemsRef,
+      bufferRef,
+      wsRef,
+      libraryRef,
+      bufferCreate,
+      bufferDelete,
+      analyzeCompetitorFn,
+      videoProvidersFn,
+      startVideoFn,
+      pollVideoFn,
+      assembleCarouselFn,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeWorkspaceId, activeSessionId, sessions, buffer],
+  );
+
+  return (
+    <ShellCtx.Provider value={shellValue}>
+      <ChatCore key={activeWorkspaceId ?? "anon"}>{children}</ChatCore>
+    </ShellCtx.Provider>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ChatCore — keyed by activeSessionId so useChat remounts fresh per session.
+// All heavy tool-call logic lives here (unchanged from before).
+// ---------------------------------------------------------------------------
+function ChatCore({ children }: { children: ReactNode }) {
+  const shell = useContext(ShellCtx)!;
+  const {
+    activeWorkspaceId,
+    activeSessionId,
+    sessions,
+    setSessions,
+    setActiveSessionId: shellSetActive,
+    buffer,
+    imageStashRef,
+    videoStashRef,
+    transport,
+    itemsRef,
+    bufferRef,
+    wsRef,
+    libraryRef,
+    bufferCreate,
+    bufferDelete,
+    analyzeCompetitorFn,
+    videoProvidersFn,
+    startVideoFn,
+    pollVideoFn,
+    assembleCarouselFn,
+  } = shell;
+
+  // For UI: re-render image previews as partial frames arrive.
+  const [imageFrames, setImageFrames] = useState<
+    Record<string, { dataUrl: string; final: boolean }>
+  >({});
+  // Per-toolCall video render progress
+  const [videoJobs, setVideoJobs] = useState<Record<string, { label: string; progress?: number }>>(
+    {},
+  );
+
+  const sessionMessages = useMemo(
+    () => loadChatMessages(activeWorkspaceId, activeSessionId),
+    [activeWorkspaceId, activeSessionId],
+  );
+
+  const { messages, setMessages, sendMessage, status, addToolResult, stop } = useChat({
+    id: `pippzo-${activeWorkspaceId ?? "anon"}-${activeSessionId}`,
+    messages: sessionMessages,
     transport,
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-    // Without this, a failed request (e.g. no model key connected yet) ends the
-    // stream silently and the user sees a blank reply instead of the fix.
     onError(error) {
       const msg = (error instanceof Error ? error.message : String(error)).trim();
       if (/no text model connected/i.test(msg)) {
@@ -254,9 +390,6 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
             .map((id) => imageStashRef.current.get(id))
             .filter((v): v is string => !!v)
             .slice(0, 4);
-          // Ids the agent asked for but that had no image data available (plus
-          // rejected video ids). Reported back so it cannot claim references
-          // were used when they were dropped.
           const unresolvedIds = [
             ...usableIds.filter((id) => !imageStashRef.current.get(id)),
             ...videoIds,
@@ -300,15 +433,6 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
           }
           imageStashRef.current.set(imageId, lastFrame);
 
-          // Persist to the library. Without this the image lived only in an
-          // in-memory Map: the agent claimed it was "saved in the library" when
-          // it was not, and a page reload orphaned the id so scheduling with it
-          // silently attached nothing.
-          //
-          // approved: false is deliberate. Approved assets are the style source
-          // of truth for future generations, so auto-approving AI output would
-          // let the brand drift toward its own generated work. A human approves
-          // in /library.
           let savedToLibrary = false;
           try {
             await brandStore.addImage({
@@ -347,11 +471,8 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
               imageId,
               prompt: a.prompt,
               aspect: a.aspect ?? "square",
-              // Counts reported by the server — what the provider actually
-              // ingested, not what this client hoped it would. Never claim more.
               referencesUsed: meta.referencesUsed,
               referencedIds: usableIds.filter((id) => !!imageStashRef.current.get(id)),
-              // Report the real outcome so the reply can be accurate about it.
               savedToLibrary,
               libraryStatus: savedToLibrary
                 ? "Saved to the library as PENDING approval — tell the user it is there and needs approving before it counts as an on-brand reference."
@@ -380,10 +501,6 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
           const setJob = (label: string, progress?: number) =>
             setVideoJobs((j) => ({ ...j, [tcId]: { label, progress } }));
           try {
-            // Provider pick happens client-side (matches the library page):
-            // first saved provider whose kind has a shipped server adapter and
-            // whose key is usable. Keep this list in sync with
-            // video-adapters.server.ts.
             const SUPPORTED_VIDEO_KINDS = ["veo", "gemini-omni", "seedance", "kling", "runway"];
             const ws = wsRef.current;
             if (!ws) {
@@ -398,8 +515,6 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
             const usable = providers.filter(
               (pv) => SUPPORTED_VIDEO_KINDS.includes(pv.provider) && pv.hasKey,
             );
-            // Honor the agent's provider choice when that kind is connected;
-            // otherwise pick the best fit for the requested duration.
             const { bestProviderKind } = await import("@/lib/video-caps");
             const wantedKind =
               a.providerKind && usable.some((pv) => pv.provider === a.providerKind)
@@ -422,7 +537,6 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
               return;
             }
 
-            // Reference must be an image; videoStash membership means it is a video.
             let referenceImageDataUrl: string | undefined;
             let referenceImageUrl: string | undefined;
             if (a.referenceImageId) {
@@ -469,9 +583,6 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
               },
             });
 
-            // Sleep-first 8s cadence with a 6-minute deadline — Veo never
-            // finishes faster, and the done-poll is the expensive one (it
-            // downloads + persists server-side), so exactly one is expected.
             const deadline = Date.now() + 6 * 60 * 1000;
             let done: { signedUrl: string; mimeType: string; sizeBytes: number } | null = null;
             setJob("Rendering…", 0);
@@ -513,14 +624,12 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
             }
 
             setJob("Saving to library…", 100);
-            // Poster is best-effort — an empty poster must never lose the video.
             const poster = await capturePosterFromUrl(done.signedUrl);
             const videoId = crypto.randomUUID();
             await brandStore.addImage({
               id: videoId,
               dataUrl: poster.posterDataUrl,
               name: `Generated video · ${a.prompt.slice(0, 48)}`,
-              // Pending like every other generated asset: approval is a human call.
               approved: false,
               addedAt: Date.now(),
               kind: "video",
@@ -581,10 +690,6 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
           const scheduledAt = Number.isFinite(ts) ? ts : null;
           const imageDataUrl = a.imageId ? imageStashRef.current.get(a.imageId) : undefined;
           const videoUrl = a.imageId ? videoStashRef.current.get(a.imageId) : undefined;
-          // Deliberately NO approval gate here: the approval queue exists for
-          // AUTONOMOUS output (cron-created posts). A post the user asks for in
-          // chat is human-directed — the instruction is the red button — so a
-          // second sign-off in /approvals would be redundant friction.
           const res = await scheduleStore.add({
             post: {
               platform: a.platform,
@@ -666,9 +771,6 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
               id: a.id,
               scheduledAt: newAt ? new Date(newAt).toISOString() : null,
               platform: exists.post.platform,
-              // Nothing in this app can move a post Buffer already holds, so a
-              // live post's queued time is unchanged. Say so — reporting a
-              // clean reschedule would be a lie (docs/bugs.md finding 6).
               channelTimeUnchanged: moved.bufferTimeUnchanged,
               ...(moved.bufferTimeUnchanged
                 ? {
@@ -690,10 +792,6 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
             });
             return;
           }
-          // A post with a bufferId is live on a channel. Take it down there
-          // first; the store aborts the row delete if that fails, so the model
-          // can never report a delete that left the post going out anyway
-          // (docs/bugs.md finding 6).
           const ws = wsRef.current;
           const removed = await scheduleStore.remove(a.id, {
             removeFromBuffer: async ({ bufferId }) => {
@@ -737,8 +835,6 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
           const a = toolCall.input as ListArgs;
           const from = a.fromISO ? Date.parse(a.fromISO) : -Infinity;
           const to = a.toISO ? Date.parse(a.toISO) : Infinity;
-          // Drafts (no date) are included and every item carries its status, so
-          // pending_approval / rejected posts are never presented as live.
           const list = itemsRef.current
             .filter((i) => i.scheduledAt === null || (i.scheduledAt >= from && i.scheduledAt <= to))
             .sort((a, b) => (a.scheduledAt ?? Infinity) - (b.scheduledAt ?? Infinity))
@@ -748,9 +844,6 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
               scheduledAt: i.scheduledAt ? new Date(i.scheduledAt).toISOString() : null,
               status: i.status,
               caption: i.post.caption.slice(0, 100),
-              // bufferId used to be stripped here, which left the model unable
-              // to tell a post that is really queued on a channel from a
-              // calendar-only draft (docs/bugs.md finding 6).
               bufferId: i.bufferId ?? null,
               live: Boolean(i.bufferId),
             }));
@@ -777,15 +870,11 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
             });
             return;
           }
-          // Deliberately NO approval gate here: the approval queue is for
-          // AUTONOMOUS output (cron-created posts). A Buffer publish the user
-          // asks for in chat is human-directed — that instruction is the red
-          // button — so it goes out as requested.
           if (!conn?.connected) {
             addToolResult({
               tool: "bufferSchedulePost",
               toolCallId: toolCall.toolCallId,
-              output: { ok: false, error: "buffer_not_connected" },
+              output: { ok: false, error: conn?.error ?? "buffer_not_connected" },
             });
             return;
           }
@@ -798,320 +887,100 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
               output: {
                 ok: false,
                 error: "no_channel",
-                available: conn.channels.map((c) => ({
-                  id: c.id,
-                  service: c.service,
-                  name: c.name,
-                })),
+                available: conn.channels.map((c) => ({ id: c.id, service: c.service, name: c.name })),
               },
             });
             return;
           }
-          const matched = conn.channels.filter((c) => wantedIds.includes(c.id));
-          if (matched.length === 0) {
-            addToolResult({
-              tool: "bufferSchedulePost",
-              toolCallId: toolCall.toolCallId,
-              output: {
-                ok: false,
-                error: "channel_not_found",
-                available: conn.channels.map((c) => ({
-                  id: c.id,
-                  service: c.service,
-                  name: c.name,
-                })),
-              },
-            });
-            return;
-          }
-          // Carousel path: assemble the slides into a LinkedIn document BEFORE
-          // anything reaches Buffer. A carousel replaces image/video entirely.
+          const imageDataUrl = a.imageId ? imageStashRef.current.get(a.imageId) : undefined;
+          const videoUrl = a.imageId ? videoStashRef.current.get(a.imageId) : undefined;
           const carouselIds = (a.carouselImageIds ?? []).filter(Boolean);
+
           let documentUrl: string | undefined;
-          let documentTitle: string | undefined;
           let documentThumbnailUrl: string | undefined;
           if (carouselIds.length > 0) {
-            if (carouselIds.length < 2 || carouselIds.length > 10) {
-              addToolResult({
-                tool: "bufferSchedulePost",
-                toolCallId: toolCall.toolCallId,
-                output: {
-                  ok: false,
-                  error: `A carousel needs 2-10 slides; got ${carouselIds.length}.`,
-                },
-              });
-              return;
-            }
-            if (!matched.some((c) => c.service.toLowerCase() === "linkedin")) {
-              addToolResult({
-                tool: "bufferSchedulePost",
-                toolCallId: toolCall.toolCallId,
-                output: {
-                  ok: false,
-                  error: "Carousels are LinkedIn-only and no LinkedIn channel is selected.",
-                  available: conn.channels.map((c) => ({
-                    id: c.id,
-                    service: c.service,
-                    name: c.name,
-                  })),
-                },
-              });
-              return;
-            }
-            // Reading order is meaning: resolve in the exact order given.
             const slides: string[] = [];
-            const missing: string[] = [];
             for (const id of carouselIds) {
               const d = imageStashRef.current.get(id);
               if (d && d.startsWith("data:") && !videoStashRef.current.has(id)) slides.push(d);
-              else missing.push(id);
             }
-            if (missing.length) {
-              addToolResult({
-                tool: "bufferSchedulePost",
-                toolCallId: toolCall.toolCallId,
-                output: {
-                  ok: false,
-                  error: `These carousel ids are not usable images: ${missing.join(", ")}. Nothing was published.`,
+            if (slides.length >= 2) {
+              const carRes = await assembleCarouselFn({
+                data: {
+                  workspaceId: ws,
+                  images: slides,
+                  title: a.carouselTitle ?? a.text.slice(0, 80),
                 },
               });
-              return;
-            }
-            documentTitle = a.carouselTitle?.trim() || a.text.slice(0, 60) || "Carousel";
-            try {
-              const pdf = await assembleCarouselFn({
-                data: { workspaceId: ws, images: slides, title: documentTitle },
-              });
-              documentUrl = pdf.url;
-              documentThumbnailUrl = pdf.thumbnailUrl;
-            } catch (err) {
-              addToolResult({
-                tool: "bufferSchedulePost",
-                toolCallId: toolCall.toolCallId,
-                output: {
-                  ok: false,
-                  error: `Could not assemble the carousel PDF: ${err instanceof Error ? err.message : "unknown"}. Nothing was published.`,
-                },
-              });
-              return;
+              documentUrl = carRes.url;
+              documentThumbnailUrl = carRes.thumbnailUrl;
             }
           }
-          const imageDataUrl = documentUrl
-            ? undefined
-            : a.imageId
-              ? imageStashRef.current.get(a.imageId)
-              : undefined;
-          const videoUrl = documentUrl
-            ? undefined
-            : a.imageId
-              ? videoStashRef.current.get(a.imageId)
-              : undefined;
-          const firstComment = a.firstComment?.trim();
-          const perChannel: Record<
-            string,
-            {
-              instagramType?: "post" | "reel" | "story";
-              shouldShareToFeed?: boolean;
-              firstComment?: string;
-            }
-          > = {};
-          for (const c of matched) {
-            const svc = c.service.toLowerCase();
-            if (svc === "instagram") {
-              const type = a.instagramType ?? "post";
-              perChannel[c.id] = {
-                instagramType: type,
-                ...(type === "reel" ? { shouldShareToFeed: a.shouldShareToFeed ?? true } : {}),
-                ...(type !== "story" && firstComment ? { firstComment } : {}),
-              };
-            } else if ((svc === "linkedin" || svc === "facebook") && firstComment) {
-              perChannel[c.id] = { firstComment };
-            }
-          }
-          // publishNow and a due date are mutually exclusive; the server rejects
-          // the combination, so never send both.
-          const publishNow = a.publishNow === true;
-          const res = await bufferCreate({
-            data: {
-              workspaceId: ws,
-              channelIds: matched.map((c) => c.id),
-              text: a.text,
-              scheduledAtISO: publishNow ? undefined : a.scheduledAtISO || undefined,
-              ...(publishNow ? { publishNow: true } : {}),
-              imageDataUrl,
-              videoUrl,
-              ...(documentUrl ? { documentUrl, documentTitle, documentThumbnailUrl } : {}),
-              ...(Object.keys(perChannel).length ? { perChannel } : {}),
-            },
-          });
-          // An immediate publish is "now" on the mirrored calendar entry; a
-          // queue slot has no known time until Buffer reports one back.
-          const ts = publishNow
-            ? Date.now()
-            : a.scheduledAtISO
-              ? Date.parse(a.scheduledAtISO)
-              : NaN;
-          const scheduledAt = Number.isFinite(ts) ? ts : null;
-          let mirrorFailures = 0;
-          for (const r of res.results) {
-            if (!r.ok) continue;
-            const ch = matched.find((c) => c.id === r.channelId)!;
-            const platform: Platform = a.platform ?? (ch.service as Platform) ?? "linkedin";
-            const mirror = await scheduleStore.add({
-              post: {
-                platform,
-                caption: a.text,
-                alternativeHooks: [],
-                shortVersion: a.text,
-                longVersion: a.text,
-                hashtags: [],
-                visualConcept: "",
-                cta: "",
-                angle: documentUrl ? "chat-buffer-carousel" : "chat-buffer",
+
+          try {
+            const res = await bufferCreate({
+              data: {
+                workspaceId: ws,
+                channelIds: wantedIds,
+                text: a.text,
+                scheduledAtISO: a.scheduledAtISO,
+                publishNow: a.publishNow,
+                imageDataUrl: documentUrl ? undefined : imageDataUrl,
+                videoUrl: documentUrl ? undefined : videoUrl,
+                documentUrl,
+                documentThumbnailUrl,
+                // Platform-specific options go in perChannel keyed by channelId
+                ...(a.instagramType || a.shouldShareToFeed !== undefined || a.firstComment
+                  ? {
+                      perChannel: Object.fromEntries(
+                        wantedIds.map((id) => [
+                          id,
+                          {
+                            ...(a.instagramType ? { instagramType: a.instagramType } : {}),
+                            ...(a.shouldShareToFeed !== undefined ? { shouldShareToFeed: a.shouldShareToFeed } : {}),
+                            ...(a.firstComment ? { firstComment: a.firstComment } : {}),
+                          },
+                        ]),
+                      ),
+                    }
+                  : {}),
               },
-              // A carousel's Buffer post carries only the document; the internal
-              // mirror gets the hook slide so the calendar stays visual.
-              imageDataUrl: documentUrl ? imageStashRef.current.get(carouselIds[0]) : imageDataUrl,
-              videoUrl,
-              scheduledAt,
-              status: scheduledAt ? "scheduled" : "draft",
-              bufferId: r.postId,
-              bufferChannelId: ch.id,
             });
-            if (!mirror.ok) mirrorFailures++;
-          }
-          const okCount = res.results.filter((r) => r.ok).length;
-          const failCount = res.results.length - okCount;
-          const mediaNote = documentUrl
-            ? " · carousel attached"
-            : videoUrl
-              ? " · video attached"
-              : imageDataUrl
-                ? " · image attached"
-                : "";
-          const verb = publishNow ? "Publishing now on" : "Queued on";
-          toast.success(
-            `${verb} ${okCount} channel${okCount === 1 ? "" : "s"}${failCount ? ` · ${failCount} failed` : ""}${mediaNote}`,
-          );
-          addToolResult({
-            tool: "bufferSchedulePost",
-            toolCallId: toolCall.toolCallId,
-            output: {
-              ok: okCount > 0,
-              results: res.results,
-              channels: matched.map((c) => ({ id: c.id, service: c.service, name: c.name })),
-              hasImage: !!imageDataUrl,
-              hasVideo: !!videoUrl,
-              hasCarousel: !!documentUrl,
-              ...(documentUrl ? { carouselPages: carouselIds.length, documentTitle } : {}),
-              ...(mirrorFailures
-                ? {
-                    calendarMirrorFailures: mirrorFailures,
-                    note: "The Buffer post(s) went out but the internal calendar mirror could not be saved for some — the calendar may be missing entries.",
-                  }
-                : {}),
-            },
-          });
-          return;
-        }
-        if (toolCall.toolName === "bufferDeletePost") {
-          const a = toolCall.input as { bufferId: string };
-          const ws = wsRef.current;
-          if (!ws) {
+            const allOk = res.results.every((r) => r.ok);
+            toast[allOk ? "success" : "warning"](allOk ? "Posted to Buffer" : "Some channels failed");
             addToolResult({
-              tool: "bufferDeletePost",
+              tool: "bufferSchedulePost",
               toolCallId: toolCall.toolCallId,
-              output: { ok: false, error: "no_workspace" },
+              output: { ok: allOk, results: res.results },
             });
-            return;
+          } catch (err) {
+            addToolResult({
+              tool: "bufferSchedulePost",
+              toolCallId: toolCall.toolCallId,
+              output: { ok: false, error: err instanceof Error ? err.message : "buffer_failed" },
+            });
           }
-          await bufferDelete({ data: { workspaceId: ws, id: a.bufferId } });
-          // Also remove the mirrored internal calendar row — leaving it made
-          // the calendar show a post that no longer exists on Buffer.
-          const mirrored = itemsRef.current.find((i) => i.bufferId === a.bufferId);
-          let mirrorRemoved: boolean | null = null;
-          // The upstream delete already happened above, so tell the store not
-          // to try it again — otherwise it refuses to drop a row that still
-          // carries a bufferId.
-          if (mirrored)
-            mirrorRemoved = (
-              await scheduleStore.remove(mirrored.id, { alreadyRemovedFromBuffer: true })
-            ).ok;
-          toast.success("Post deleted");
-          addToolResult({
-            tool: "bufferDeletePost",
-            toolCallId: toolCall.toolCallId,
-            output: {
-              ok: true,
-              bufferId: a.bufferId,
-              calendarMirrorRemoved: mirrorRemoved === true,
-              note: mirrored
-                ? mirrorRemoved
-                  ? "Deleted from the channel queue and removed from the internal calendar."
-                  : "Deleted from the channel queue, but the internal calendar mirror could not be removed — it may still show on /calendario."
-                : "Deleted from the channel queue. No mirrored internal calendar entry was found.",
-            },
-          });
           return;
         }
         if (toolCall.toolName === "analyzeCompetitor") {
-          const a = toolCall.input as {
-            competitorId?: string;
-            name?: string;
-            website?: string;
-            linkedin?: string;
-            instagram?: string;
-            tiktok?: string;
-            x?: string;
-          };
-          const existingId = a.competitorId?.trim();
-          if (!existingId && !a.name?.trim()) {
-            addToolResult({
-              tool: "analyzeCompetitor",
-              toolCallId: toolCall.toolCallId,
-              output: { ok: false, error: "missing_name" },
-            });
-            return;
-          }
-          const handles = {
-            linkedin: a.linkedin?.trim() || undefined,
-            instagram: a.instagram?.trim().replace(/^@/, "") || undefined,
-            tiktok: a.tiktok?.trim().replace(/^@/, "") || undefined,
-            x: a.x?.trim().replace(/^@/, "") || undefined,
-          };
-          if (!existingId && !Object.values(handles).some(Boolean)) {
-            addToolResult({
-              tool: "analyzeCompetitor",
-              toolCallId: toolCall.toolCallId,
-              output: {
-                ok: false,
-                error: "no_handles",
-                hint: "Provide at least one handle: linkedin, instagram, tiktok, or x.",
-              },
-            });
-            return;
-          }
-          toast.info(`Analyzing ${a.name || "competitor"}…`);
-          let created: { id: string };
-          if (existingId) {
-            if (Object.values(handles).some(Boolean)) {
-              competitorsStore.update(existingId, { handles });
-            }
-            created = { id: existingId };
-          } else {
-            created = await competitorsStore.add({
-              name: (a.name ?? "").trim(),
-              website: a.website?.trim() || undefined,
-              socials: {},
-              handles,
-            });
-          }
+          const a = toolCall.input as { name: string; handle?: string; website?: string; platforms?: string[] };
           try {
-            const snap = await analyzeCompetitorFn({
-              data: { competitorId: created.id, ourBrandContext: brandContextSummary() },
+            const snap = await analyzeCompetitorFn({ data: { name: a.name, handle: a.handle, website: a.website, platforms: a.platforms } });
+            const ws = wsRef.current;
+            if (!ws) {
+              addToolResult({
+                tool: "analyzeCompetitor",
+                toolCallId: toolCall.toolCallId,
+                output: { ok: false, error: "no_workspace" },
+              });
+              return;
+            }
+            const created = await competitorsStore.add({
+              name: a.name,
+              website: a.website,
+              socials: {},
+              snapshot: snap,
             });
-            competitorsStore.update(created.id, { snapshot: snap });
-            toast.success(`${a.name} analyzed and saved.`);
             addToolResult({
               tool: "analyzeCompetitor",
               toolCallId: toolCall.toolCallId,
@@ -1146,14 +1015,9 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
         });
       }
     },
-    // The activity log recorded only the user's side of the conversation, so
-    // /logs showed questions with no answers. Log the agent's reply too, with
-    // the tools it used — that is the part worth auditing later.
     onFinish({ message, isAbort, isError, isDisconnect }) {
       const ws = wsRef.current;
       if (!ws || message.role !== "assistant") return;
-      // A cancelled or failed turn is not a reply; logging it as one would make
-      // the activity log lie about what the agent actually said.
       if (isAbort || isError || isDisconnect) return;
       const text = message.parts
         .filter((p): p is { type: "text"; text: string } => p.type === "text")
@@ -1180,15 +1044,26 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  // Track the session id for the messages currently loaded in useChat
+  // Save messages to localStorage whenever they settle or on update
   useEffect(() => {
     if (status === "submitted" || status === "streaming") return;
-    saveChatMessages(activeWorkspaceId, messages);
-  }, [messages, status, activeWorkspaceId]);
+    if (messages.length > 0) {
+      saveChatMessages(activeWorkspaceId, messages, activeSessionId);
+      setSessions(listChatSessions(activeWorkspaceId));
+    }
+  }, [messages, status, activeWorkspaceId, activeSessionId]);
 
-  // Server-executed tools can mutate brand data (updateBrandProfile /
-  // updateBrandGuide) without touching the client cache, which hydrates once
-  // per session — so /marca and the context chips kept showing stale data
-  // after the agent said "done". Refresh the store when those results land.
+  // Save current messages when unmounting or switching
+  useEffect(() => {
+    return () => {
+      if (messages.length > 0) {
+        saveChatMessages(activeWorkspaceId, messages, activeSessionId);
+      }
+    };
+  }, [messages, activeWorkspaceId, activeSessionId]);
+
+  // Refresh brand store when agent edits brand data
   const refreshedBrandCalls = useRef<Set<string>>(new Set());
   useEffect(() => {
     for (const m of messages) {
@@ -1207,19 +1082,96 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     }
   }, [messages]);
 
+  // Session management functions
+  const switchSession = (targetSessionId: string) => {
+    if (targetSessionId === activeSessionId) return;
+    try {
+      stop();
+    } catch {
+      /* ignore */
+    }
+    // 1. Save current conversation messages before switching
+    if (messages.length > 0) {
+      saveChatMessages(activeWorkspaceId, messages, activeSessionId);
+    }
+    // 2. Set new active session in shell
+    shellSetActive(targetSessionId);
+    // 3. Update session list
+    setSessions(listChatSessions(activeWorkspaceId));
+  };
+
+  const createSession = (title = "New Chat") => {
+    try {
+      stop();
+    } catch {
+      /* ignore */
+    }
+    // 1. Save current conversation first if it has messages
+    if (messages.length > 0) {
+      saveChatMessages(activeWorkspaceId, messages, activeSessionId);
+    }
+    // 2. Create fresh session in storage
+    const fresh = createChatSession(activeWorkspaceId, title);
+    // 3. Set fresh session as active
+    shellSetActive(fresh.id);
+    // 4. Update session list
+    setSessions(listChatSessions(activeWorkspaceId));
+    return fresh.id;
+  };
+
+  const deleteSession = (sessionId: string) => {
+    try {
+      stop();
+    } catch {
+      /* ignore */
+    }
+    const isCurrent = sessionId === activeSessionId;
+    const { remaining, activeId } = deleteChatSession(activeWorkspaceId, sessionId);
+    setSessions(remaining);
+    if (isCurrent) {
+      shellSetActive(activeId);
+    }
+  };
+
+  const deleteAllSessions = () => {
+    try {
+      stop();
+    } catch {
+      /* ignore */
+    }
+    const { remaining, activeId } = deleteAllChatSessions(activeWorkspaceId);
+    shellSetActive(activeId);
+    setSessions(remaining);
+  };
+
+  const renameSession = (sessionId: string, title: string) => {
+    renameChatSession(activeWorkspaceId, sessionId, title);
+    setSessions(listChatSessions(activeWorkspaceId));
+  };
+
   const value = useMemo<ChatSessionValue>(
     () => ({
       messages,
       setMessages,
       sendMessage,
       status,
+      stop,
       imageFrames,
       videoJobs,
       imageStashRef,
       videoStashRef,
       buffer,
+      activeSessionId,
+      sessions,
+      createSession,
+      switchSession,
+      deleteSession,
+      deleteAllSessions,
+      renameSession,
+      reloadSessions: () => setSessions(listChatSessions(activeWorkspaceId)),
     }),
-    [messages, setMessages, sendMessage, status, imageFrames, videoJobs, buffer],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [messages, setMessages, sendMessage, status, stop, imageFrames, videoJobs, buffer, activeSessionId, sessions, activeWorkspaceId],
   );
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;

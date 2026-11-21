@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Logo } from "@/components/logo";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { useState } from "react";
 
@@ -18,9 +19,12 @@ export const Route = createFileRoute("/")({
           "Pippzo writes in your brand voice, designs on-brand visuals, publishes on schedule and reports what worked.",
       },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
+      { property: "og:image", content: "/logo.png" },
+      { name: "twitter:image", content: "/logo.png" },
     ],
     links: [
+      { rel: "icon", type: "image/png", href: "/logo.png" },
+      { rel: "apple-touch-icon", href: "/logo.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -92,47 +96,103 @@ const CSS = `
 .pz-xs { font-size: 13px; line-height: 1.3; }
 
 .pz-header {
-  position: sticky; top: 0; z-index: 20;
+  position: sticky; top: 0; z-index: 50;
   width: 100%;
-  background: var(--paper-white);
-  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  transition: all 0.2s ease;
 }
-.pz-header-row { height: 56px; display: flex; align-items: center; justify-content: space-between; }
+.pz-header-row { height: 60px; display: flex; align-items: center; justify-content: space-between; }
 
-.pz-logo { display: flex; align-items: center; gap: 10px; }
+.pz-logo { display: flex; align-items: center; gap: 10px; text-decoration: none !important; }
 .pz-logo-mark {
-  width: 24px; height: 24px; border-radius: var(--radius-chips);
+  width: 26px; height: 26px; border-radius: var(--radius-chips);
   background: var(--onyx); color: var(--paper-white);
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 600; line-height: 1; letter-spacing: -0.2px;
 }
-.pz-logo-word { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; color: var(--onyx); }
+.pz-logo-word {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  color: #09090b !important;
+  transition: opacity .15s ease;
+}
+.pz-logo:hover .pz-logo-word { opacity: .85; }
 
-.pz-nav { display: flex; align-items: center; gap: 24px; }
+.pz-nav { display: flex; align-items: center; gap: 8px; }
+.pz a.pz-ghost,
+.pz button.pz-ghost,
 .pz-ghost {
   background: transparent; border: none; cursor: pointer;
-  font-size: 14px; font-weight: 400; color: var(--subtext);
-  padding: 0; transition: color .15s ease;
+  font-size: 14px; font-weight: 500; color: #52525b !important;
+  padding: 6px 12px; border-radius: 8px; transition: all .15s ease;
+  text-decoration: none !important;
 }
-.pz-ghost:hover { color: var(--ink); }
-.pz-nav-actions { display: flex; align-items: center; gap: 16px; }
+.pz a.pz-ghost:hover,
+.pz button.pz-ghost:hover,
+.pz-ghost:hover {
+  color: #09090b !important;
+  background: rgba(0, 0, 0, 0.04);
+}
+.pz-nav-actions { display: flex; align-items: center; gap: 12px; }
 
+.pz a.pz-btn-primary,
+.pz button.pz-btn-primary,
 .pz-btn-primary {
   display: inline-flex; align-items: center; gap: 6px;
-  background: var(--ink); color: var(--paper-white);
-  font-size: 14px; font-weight: 500; line-height: 1.43;
-  padding: 8px 12px; border: none; border-radius: var(--radius-buttons);
-  cursor: pointer; transition: opacity .15s ease;
+  background: linear-gradient(180deg, #18181b 0%, #09090b 100%);
+  color: #ffffff !important;
+  font-size: 13.5px; font-weight: 500; line-height: 1.43;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1), 0 3px 8px rgba(0,0,0,0.08);
+  cursor: pointer;
+  transition: all .2s cubic-bezier(0.16, 1, 0.3, 1);
+  text-decoration: none !important;
 }
-.pz-btn-primary:hover { opacity: .88; }
+.pz a.pz-btn-primary:hover,
+.pz button.pz-btn-primary:hover,
+.pz-btn-primary:hover {
+  background: linear-gradient(180deg, #27272a 0%, #18181b 100%);
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.12);
+  transform: translateY(-1px);
+}
+.pz a.pz-btn-primary svg,
+.pz button.pz-btn-primary svg,
+.pz-btn-primary svg {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+  transition: transform .2s ease;
+}
+.pz a.pz-btn-primary:hover svg,
+.pz button.pz-btn-primary:hover svg,
+.pz-btn-primary:hover svg {
+  transform: translate(2px, -2px);
+}
+
+.pz a.pz-btn-secondary,
+.pz button.pz-btn-secondary,
 .pz-btn-secondary {
   display: inline-flex; align-items: center; gap: 6px;
-  background: var(--paper-white); color: var(--ink);
-  font-size: 14px; font-weight: 500; line-height: 1.43;
-  padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius-buttons);
-  cursor: pointer; transition: border-color .15s ease;
+  background: #ffffff; color: #18181b !important;
+  font-size: 13.5px; font-weight: 500; line-height: 1.43;
+  padding: 8px 16px; border: 1px solid #e4e4e7; border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  cursor: pointer; transition: all .2s ease;
+  text-decoration: none !important;
 }
-.pz-btn-secondary:hover { border-color: #c9c9c9; }
+.pz a.pz-btn-secondary:hover,
+.pz button.pz-btn-secondary:hover,
+.pz-btn-secondary:hover {
+  border-color: #d4d4d8;
+  background: #f4f4f5;
+  transform: translateY(-1px);
+}
 
 .pz-section { padding: var(--section-gap) 0; }
 .pz-hero { padding: 80px 0 var(--section-gap); text-align: center; }
@@ -157,11 +217,18 @@ const CSS = `
 .pz-prompt-input::placeholder { color: var(--subtext); }
 .pz-prompt-go {
   flex: none; width: 36px; height: 36px; border-radius: var(--radius-buttons);
-  background: var(--ink); color: var(--paper-white); border: none;
+  background: linear-gradient(180deg, #18181b 0%, #09090b 100%);
+  color: #ffffff !important; border: 1px solid rgba(255, 255, 255, 0.15);
   display: flex; align-items: center; justify-content: center; cursor: pointer;
-  transition: opacity .15s ease;
+  transition: all .2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
 }
-.pz-prompt-go:hover { opacity: .88; }
+.pz-prompt-go:hover {
+  background: linear-gradient(180deg, #27272a 0%, #18181b 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.pz-prompt-go svg { color: #ffffff !important; stroke: #ffffff !important; }
 
 .pz-chips { margin-top: var(--element-gap); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; }
 .pz-chip {
@@ -418,9 +485,9 @@ function Index() {
       <div className="pz">
         <header className="pz-header">
           <div className="pz-shell pz-header-row">
-            <Link to="/" className="pz-logo">
-              <span className="pz-logo-mark">P</span>
-              <span className="pz-logo-word">Pippzo</span>
+            <Link to="/" className="pz-logo flex items-center gap-2.5">
+              <Logo size="sm" />
+              <span className="pz-logo-word font-semibold text-lg">Pippzo</span>
             </Link>
             <nav className="pz-nav">
               <a href="#templates" className="pz-ghost">
@@ -584,10 +651,8 @@ function Index() {
 
         <footer className="pz-footer">
           <div className="pz-shell pz-footer-row">
-            <div className="pz-logo">
-              <span className="pz-logo-mark" style={{ width: 20, height: 20, fontSize: 10 }}>
-                P
-              </span>
+            <div className="pz-logo flex items-center gap-2">
+              <Logo size="xs" />
               <span className="pz-sm" style={{ color: "var(--subtext)" }}>
                 Pippzo, open source, bring your own keys.
               </span>

@@ -1110,24 +1110,36 @@ export async function sendReply(
   let error: string | null = null;
   let externalId: string | null = null;
   try {
-    const creds = await requireUnipileCreds(client, workspaceId);
-    if (item.kind === "dm") {
-      if (!item.thread_id) throw new Error("This conversation has no chat id.");
-      const res = await sendChatMessage(creds, item.thread_id, clean);
-      externalId = res.id;
+    const isX = (item as any).provider === "x" || item.network.toLowerCase() === "x" || item.network.toLowerCase() === "twitter";
+    if (isX) {
+      const { publishTweet } = await import("@/lib/x/x.server");
+      const inReplyTo = item.external_id.replace(/^tweet:/, "");
+      const res = await publishTweet(client, workspaceId, {
+        text: clean,
+        inReplyToTweetId: inReplyTo,
+      });
+      if (!res.ok) throw new Error(res.error || "Failed to send reply on X.");
+      externalId = res.tweetId || null;
     } else {
-      if (!item.post_id) throw new Error("This comment has no parent post id.");
-      const commentId = item.external_id.startsWith("comment:")
-        ? item.external_id.slice("comment:".length)
-        : undefined;
-      const res = await replyToComment(
-        creds,
-        item.external_account_id,
-        item.post_id,
-        clean,
-        commentId,
-      );
-      externalId = res.id;
+      const creds = await requireUnipileCreds(client, workspaceId);
+      if (item.kind === "dm") {
+        if (!item.thread_id) throw new Error("This conversation has no chat id.");
+        const res = await sendChatMessage(creds, item.thread_id, clean);
+        externalId = res.id;
+      } else {
+        if (!item.post_id) throw new Error("This comment has no parent post id.");
+        const commentId = item.external_id.startsWith("comment:")
+          ? item.external_id.slice("comment:".length)
+          : undefined;
+        const res = await replyToComment(
+          creds,
+          item.external_account_id,
+          item.post_id,
+          clean,
+          commentId,
+        );
+        externalId = res.id;
+      }
     }
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
@@ -1202,16 +1214,24 @@ export async function likeItem(
     .eq("id", itemId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
-  const item = data as ItemRow | null;
-  if (!item) return { ok: false, error: "Item not found." };
-  if (item.kind === "dm" || !item.post_id)
-    return { ok: false, error: "Only comments can be liked." };
+  const item = data as (ItemRow & { provider?: string }) | null;
+  if (!item) return { ok: false, error: "Item not found" };
+  if (item.kind === "dm" && item.provider !== "x")
+    return { ok: false, error: "Only comments or tweets can be liked." };
   try {
+    const isX = item.provider === "x" || item.network.toLowerCase() === "x" || item.network.toLowerCase() === "twitter";
+    if (isX) {
+      const { likeTweet } = await import("@/lib/x/x.server");
+      const tweetId = item.external_id.replace(/^tweet:/, "");
+      const res = await likeTweet(client, workspaceId, tweetId);
+      if (!res.ok) throw new Error(res.error || "Could not like tweet on X.");
+      return { ok: true };
+    }
     const creds = await requireUnipileCreds(client, workspaceId);
     const commentId = item.external_id.startsWith("comment:")
       ? item.external_id.slice("comment:".length)
       : undefined;
-    await reactToPost(creds, item.external_account_id, item.post_id, commentId);
+    await reactToPost(creds, item.external_account_id, item.post_id!, commentId);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Could not like." };
@@ -1341,6 +1361,17 @@ export async function runEngagementSweep(
     ),
   });
   let budgetExhausted = ingest.budgetExhausted;
+
+  let xIngested = 0;
+  if (!sweepDeadline.expired()) {
+    try {
+      const { syncXMentionsToEngagement } = await import("@/lib/x/x.server");
+      const xRes = await syncXMentionsToEngagement(client, workspaceId);
+      xIngested = xRes.ingested;
+    } catch {
+      // Best-effort: X not connected or transient rate limit
+    }
+  }
 
   const { data: fresh } = await client
     .from("engagement_items")

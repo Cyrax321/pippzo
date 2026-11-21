@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { Logo } from "@/components/logo";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { brandContextMeta, brandStore } from "@/lib/brand-store";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,11 +21,23 @@ import {
   ExternalLink,
   Copy,
   Check,
+  Square,
+  History,
+  Plus,
+  Trash2,
+  Pencil,
+  MessageSquare,
+  Clock,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 import { useWorkspace } from "@/lib/workspace";
-import { clearChatMessages } from "@/lib/chat-history";
+import {
+  clearChatMessages,
+  groupSessionsByDate,
+  formatSessionDate,
+  type ChatSessionMeta,
+} from "@/lib/chat-history";
 import { logActivityFn } from "@/lib/activity-log";
 import { safeHttpUrl } from "@/lib/safe-url";
 import { useChatSession, type GenImageArgs, type ScheduleArgs } from "@/lib/chat-session";
@@ -178,11 +191,19 @@ function ChatPage() {
     setMessages,
     sendMessage,
     status,
+    stop,
     imageFrames,
     videoJobs,
     imageStashRef,
     videoStashRef,
     buffer,
+    activeSessionId,
+    sessions,
+    createSession,
+    switchSession,
+    deleteSession,
+    deleteAllSessions,
+    renameSession,
   } = useChatSession();
   const [meta, setMeta] = useState({
     hasProfile: false,
@@ -191,24 +212,53 @@ function ChatPage() {
     chars: 0,
   });
 
-  useEffect(() => {
-    const refresh = () => {
-      setMeta(brandContextMeta());
-    };
-    refresh();
-    const unsub = brandStore.subscribe(refresh);
-    const onFocus = () => refresh();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      unsub();
-      window.removeEventListener("focus", onFocus);
-    };
-  }, []);
+  const [showHistory, setShowHistory] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
 
-  const startNewChat = () => {
-    clearChatMessages(activeWorkspaceId);
-    setMessages([]);
+  const groupedSessions = useMemo(() => groupSessionsByDate(sessions), [sessions]);
+
+  const handleNewChat = () => {
+    createSession();
     setInput("");
+    setAttachments([]);
+    toast.success("Started new chat");
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+
+  const handleStartRename = (s: { id: string; title: string }) => {
+    setEditingSessionId(s.id);
+    setEditTitle(s.title);
+  };
+
+  const handleSaveRename = (id: string) => {
+    if (editTitle.trim()) {
+      renameSession(id, editTitle.trim());
+      toast.success("Chat renamed");
+    }
+    setEditingSessionId(null);
+  };
+
+  const handleDeleteChat = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    deleteSession(id);
+    toast.success("Chat deleted");
+  };
+
+  const handleDeleteCurrentChat = () => {
+    deleteSession(activeSessionId);
+    setInput("");
+    setAttachments([]);
+    toast.success("Chat deleted");
+  };
+
+  const handleClearAllHistory = () => {
+    if (window.confirm("Are you sure you want to delete all chat history? This cannot be undone.")) {
+      deleteAllSessions();
+      setInput("");
+      setAttachments([]);
+      toast.success("All chat history deleted");
+    }
   };
 
   const [input, setInput] = useState("");
@@ -322,52 +372,231 @@ function ChatPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-8 flex flex-col h-[calc(100vh-3rem)]">
-      <div className="pb-4 border-b border-border">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Chat</p>
-            <h1 className="mt-1 font-serif text-3xl">Pip</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Your social agent. Writes, designs, schedules and reports, all in your brand voice.
-            </p>
-          </div>
-          {messages.length > 0 && (
-            <button
-              type="button"
-              onClick={startNewChat}
-              className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition hover:border-foreground/30 hover:text-foreground"
+    <div className="flex h-[calc(100vh-3rem)] overflow-hidden">
+      {/* Collapsible Chat History Drawer / Sidebar */}
+      {showHistory && (
+        <aside className="w-80 border-r border-border bg-card/60 backdrop-blur-sm flex flex-col shrink-0 h-full z-20 transition-all">
+          <div className="p-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-primary" />
+              <span className="font-semibold text-sm">Chat History</span>
+              <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                {sessions.length}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground"
+              onClick={() => setShowHistory(false)}
             >
-              New chat
-            </button>
-          )}
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px]">
-          <span className="text-muted-foreground uppercase tracking-wider mr-1">Context:</span>
-          <span
-            className={`rounded-full border px-2 py-0.5 ${meta.hasProfile ? "border-accent/40 bg-accent/10 text-foreground" : "border-border text-muted-foreground"}`}
-          >
-            Brand {meta.hasProfile ? "✓" : "—"}
-          </span>
-          <span
-            className={`rounded-full border px-2 py-0.5 ${meta.hasGuideline ? "border-accent/40 bg-accent/10 text-foreground" : "border-border text-muted-foreground"}`}
-          >
-            Guide {meta.hasGuideline ? "✓" : "—"}
-          </span>
-          <span
-            className={`rounded-full border px-2 py-0.5 ${meta.approvedImages ? "border-accent/40 bg-accent/10 text-foreground" : "border-border text-muted-foreground"}`}
-          >
-            {meta.approvedImages} visual ref{meta.approvedImages === 1 ? "" : "s"}
-          </span>
-          <span
-            className={`rounded-full border px-2 py-0.5 inline-flex items-center gap-1 ${buffer?.connected ? "border-foreground text-foreground" : "border-border text-muted-foreground"}`}
-          >
-            <Share2 className="h-3 w-3" /> Channels{" "}
-            {buffer?.connected ? `✓ ${buffer.channels.length}` : "—"}
-          </span>
-          <span className="text-muted-foreground">
-            · {meta.chars.toLocaleString("en-US")} chars
-          </span>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="p-3 border-b border-border/60">
+            <Button
+              onClick={handleNewChat}
+              className="w-full gap-2 text-xs h-9 justify-center font-medium shadow-sm"
+            >
+              <Plus className="h-4 w-4" /> Start New Chat
+            </Button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-4">
+            {groupedSessions.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-8">
+                No past chats yet. Start a new conversation!
+              </p>
+            ) : (
+              groupedSessions.map((group) => (
+                <div key={group.groupLabel} className="space-y-1.5">
+                  <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Clock className="h-3 w-3" />
+                    <span>{group.groupLabel}</span>
+                  </div>
+                  <div className="space-y-1">
+                    {group.sessions.map((s) => {
+                      const isActive = s.id === activeSessionId;
+                      const isEditing = s.id === editingSessionId;
+
+                      return (
+                        <div
+                          key={s.id}
+                          onClick={() => {
+                            if (!isEditing) switchSession(s.id);
+                          }}
+                          className={`group relative rounded-lg px-2.5 py-2 text-xs cursor-pointer border transition-all ${
+                            isActive
+                              ? "bg-accent/40 border-foreground/40 shadow-sm font-medium"
+                              : "border-transparent hover:bg-muted/50 hover:border-border/60 text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {isEditing ? (
+                            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                autoFocus
+                                value={editTitle}
+                                onChange={(e) => setEditTitle(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleSaveRename(s.id);
+                                  if (e.key === "Escape") setEditingSessionId(null);
+                                }}
+                                className="w-full text-xs bg-background border border-primary px-1.5 py-0.5 rounded font-medium text-foreground focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveRename(s.id)}
+                                className="p-1 hover:text-emerald-500 text-muted-foreground"
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingSessionId(null)}
+                                className="p-1 hover:text-destructive text-muted-foreground"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-start justify-between gap-1.5">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <MessageSquare className="h-3 w-3 shrink-0 opacity-70" />
+                                  <p className="truncate font-medium text-foreground leading-snug">
+                                    {s.title}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
+                                  <span>{formatSessionDate(s.updatedAt || s.createdAt)}</span>
+                                  {typeof s.messageCount === "number" && s.messageCount > 0 && (
+                                    <span>· {s.messageCount} msg{s.messageCount === 1 ? "" : "s"}</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-0.5 opacity-70 group-hover:opacity-100 hover:opacity-100 transition-opacity shrink-0">
+                                <button
+                                  type="button"
+                                  title="Rename chat"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStartRename(s);
+                                  }}
+                                  className="p-1 hover:text-foreground text-muted-foreground hover:bg-muted rounded"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Delete chat"
+                                  onClick={(e) => handleDeleteChat(s.id, e)}
+                                  className="p-1 hover:text-destructive text-muted-foreground hover:bg-muted rounded"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="p-3 border-t border-border/60 bg-muted/20">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearAllHistory}
+              disabled={sessions.length === 0}
+              className="w-full gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20 h-8 justify-center"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Delete All History</span>
+            </Button>
+          </div>
+        </aside>
+      )}
+
+      {/* Main Chat Workspace */}
+      <div className="flex-1 flex flex-col h-full min-w-0 max-w-4xl mx-auto px-4 sm:px-6 py-6 overflow-hidden">
+        <div className="pb-4 border-b border-border shrink-0">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Chat</p>
+              <div className="mt-1 flex items-center gap-2.5">
+                <Logo size="sm" />
+                <h1 className="font-serif text-3xl">Pip</h1>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Your social agent. Writes, designs, schedules and reports, all in your brand voice.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant={showHistory ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setShowHistory((v) => !v)}
+                className="gap-1.5 text-xs h-8"
+                title="Toggle chat history"
+              >
+                <History className="h-3.5 w-3.5" />
+                <span>History</span>
+                <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full font-mono">
+                  {sessions.length}
+                </span>
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleNewChat}
+                className="gap-1.5 text-xs h-8"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>New Chat</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDeleteCurrentChat}
+                className="gap-1.5 text-xs h-8 text-muted-foreground hover:text-destructive hover:border-destructive/40"
+                title="Delete current conversation"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Delete</span>
+              </Button>
+            </div>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="text-muted-foreground uppercase tracking-wider mr-1">Context:</span>
+            <span
+              className={`rounded-full border px-2 py-0.5 ${meta.hasProfile ? "border-accent/40 bg-accent/10 text-foreground" : "border-border text-muted-foreground"}`}
+            >
+              Brand {meta.hasProfile ? "✓" : "—"}
+            </span>
+            <span
+              className={`rounded-full border px-2 py-0.5 ${meta.hasGuideline ? "border-accent/40 bg-accent/10 text-foreground" : "border-border text-muted-foreground"}`}
+            >
+              Guide {meta.hasGuideline ? "✓" : "—"}
+            </span>
+            <span
+              className={`rounded-full border px-2 py-0.5 ${meta.approvedImages ? "border-accent/40 bg-accent/10 text-foreground" : "border-border text-muted-foreground"}`}
+            >
+              {meta.approvedImages} visual ref{meta.approvedImages === 1 ? "" : "s"}
+            </span>
+            <span
+              className={`rounded-full border px-2 py-0.5 inline-flex items-center gap-1 ${buffer?.connected ? "border-foreground text-foreground" : "border-border text-muted-foreground"}`}
+            >
+              <Share2 className="h-3 w-3" /> Channels{" "}
+              {buffer?.connected ? `✓ ${buffer.channels.length}` : "—"}
+            </span>
+            <span className="text-muted-foreground">
+              · {meta.chars.toLocaleString("en-US")} chars
+            </span>
           {!meta.hasProfile && !meta.hasGuideline && (
             <Link
               to="/marca"
@@ -390,7 +619,8 @@ function ChatPage() {
       <div ref={scrollRef} className="flex-1 overflow-y-auto py-6 space-y-6">
         {messages.length === 0 && (
           <div className="space-y-6">
-            <div className="space-y-2">
+            <div className="space-y-3">
+              <Logo size="md" />
               <h2 className="font-serif text-2xl text-foreground">Hi, this is Pip.</h2>
               <p className="text-sm text-muted-foreground">
                 Tell me what to post and I will handle the writing, the visuals and the scheduling.
@@ -875,12 +1105,41 @@ function ChatPage() {
           );
         })}
 
-        {(status === "submitted" || status === "streaming") &&
-          messages[messages.length - 1]?.role === "user" && (
-            <div className="text-muted-foreground text-sm flex items-center gap-2">
-              <Loader2 className="h-3 w-3 animate-spin" /> Thinking…
+        {(status === "submitted" || status === "streaming") && (
+          <div className="text-muted-foreground text-sm flex items-center justify-between py-2 px-3 rounded-lg bg-muted/40 border border-border">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+              <span>Thinking…</span>
             </div>
-          )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                stop();
+                toast.info("Response stopped");
+              }}
+              className="h-7 text-xs text-destructive hover:bg-destructive/10"
+            >
+              Stop response
+            </Button>
+          </div>
+        )}
+
+        {status === "error" && (
+          <div className="text-destructive text-sm flex items-center justify-between py-2 px-3 rounded-lg bg-destructive/10 border border-destructive/20">
+            <span>Response encountered an error.</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleNewChat}
+              className="h-7 text-xs"
+            >
+              Start New Chat
+            </Button>
+          </div>
+        )}
       </div>
 
       <div
@@ -943,76 +1202,118 @@ function ChatPage() {
             })}
           </div>
         )}
-        <div className="flex gap-2 items-end">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,application/pdf"
-            className="hidden"
-            onChange={(e) => {
-              acceptFiles(e.target.files);
-              e.target.value = "";
-            }}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Attach file"
-            className="shrink-0 h-11 w-11 text-muted-foreground"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Paperclip className="h-4 w-4" />
-          </Button>
-          <Textarea
-            ref={taRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void send();
-              }
-              if (e.key === "Escape" && attachments.length) {
-                e.preventDefault();
-                setAttachments([]);
-              }
-            }}
-            onPaste={(e) => {
-              const files: File[] = [];
-              for (const item of Array.from(e.clipboardData.items)) {
-                if (item.kind === "file") {
-                  const f = item.getAsFile();
-                  if (f) files.push(f);
+        {/* Stop Generation Banner when running */}
+        {(status === "submitted" || status === "streaming") && (
+          <div className="flex items-center justify-center mb-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                stop();
+                toast.info("Generation stopped");
+              }}
+              className="gap-1.5 text-xs bg-background/95 shadow-sm border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive h-8 px-3.5 rounded-full"
+            >
+              <Square className="h-3 w-3 fill-destructive" /> Stop generation
+            </Button>
+          </div>
+        )}
+
+        <div className="rounded-xl border border-border bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring/50 focus-within:border-foreground/30 transition-all">
+          <div className="flex gap-1 items-end px-2 py-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                acceptFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Attach file"
+              className="shrink-0 h-9 w-9 text-muted-foreground hover:text-foreground"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
+            <Textarea
+              ref={taRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  if (status === "submitted" || status === "streaming") {
+                    e.preventDefault();
+                    stop();
+                    toast.info("Generation stopped");
+                    return;
+                  }
+                  if (attachments.length) {
+                    e.preventDefault();
+                    setAttachments([]);
+                    return;
+                  }
                 }
-              }
-              if (files.length) {
-                e.preventDefault();
-                acceptFiles(files);
-              }
-            }}
-            placeholder="Write, paste, or drop images / PDFs…"
-            rows={1}
-            className="resize-none min-h-[44px] max-h-40"
-          />
-          <Button
-            onClick={() => {
-              void send();
-            }}
-            disabled={
-              (!input.trim() && attachments.length === 0) ||
-              status === "submitted" ||
-              status === "streaming"
-            }
-            size="icon"
-            aria-label="Send message"
-            className="shrink-0 h-11 w-11"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void send();
+                }
+              }}
+              onPaste={(e) => {
+                const files: File[] = [];
+                for (const item of Array.from(e.clipboardData.items)) {
+                  if (item.kind === "file") {
+                    const f = item.getAsFile();
+                    if (f) files.push(f);
+                  }
+                }
+                if (files.length) {
+                  e.preventDefault();
+                  acceptFiles(files);
+                }
+              }}
+              placeholder="Write, paste, or drop images / PDFs…"
+              rows={1}
+              className="resize-none min-h-[44px] max-h-40 border-0 shadow-none focus-visible:ring-0 bg-transparent px-1"
+            />
+            {status === "submitted" || status === "streaming" ? (
+              <Button
+                type="button"
+                onClick={() => {
+                  stop();
+                  toast.info("Generation stopped");
+                }}
+                size="icon"
+                aria-label="Stop generation"
+                title="Stop generation (Esc)"
+                className="shrink-0 h-9 w-9 bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors shadow-sm rounded-lg"
+              >
+                <Square className="h-4 w-4 fill-current" />
+              </Button>
+            ) : (
+              <Button
+                onClick={() => {
+                  void send();
+                }}
+                disabled={!input.trim() && attachments.length === 0}
+                size="icon"
+                aria-label="Send message"
+                className="shrink-0 h-9 w-9 rounded-lg"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
+  </div>
   );
 }

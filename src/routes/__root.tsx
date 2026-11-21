@@ -1,4 +1,5 @@
 import { APP_NAME } from "@/lib/app-config";
+import { Logo } from "@/components/logo";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -78,8 +79,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:description", content: "Your Social Media Manager" },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: "/logo.png" },
+      { name: "twitter:image", content: "/logo.png" },
     ],
     links: [
+      { rel: "icon", type: "image/png", href: "/logo.png" },
+      { rel: "apple-touch-icon", href: "/logo.png" },
       { rel: "stylesheet", href: appCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
@@ -135,7 +140,10 @@ function RootComponent() {
                     <header className="h-12 flex items-center justify-between border-b border-border px-3 sticky top-0 bg-background/85 backdrop-blur z-10">
                       <div className="flex items-center gap-3">
                         <SidebarTrigger />
-                        <span className="label-eyebrow hidden sm:inline">{APP_NAME}</span>
+                        <div className="flex items-center gap-2">
+                          <Logo size="xs" />
+                          <span className="label-eyebrow hidden sm:inline">{APP_NAME}</span>
+                        </div>
                       </div>
                     </header>
                     <main className="flex-1 min-w-0">
