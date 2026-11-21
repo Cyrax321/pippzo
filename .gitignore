@@ -55,6 +55,7 @@ public/demo.mp4
 
 # Nested cloned repositories
 social-sdk/
+postiz-app/
 
 # Supabase Studio local snippets
 supabase/snippets/
