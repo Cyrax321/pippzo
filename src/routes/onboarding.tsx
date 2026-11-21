@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Logo } from "@/components/logo";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -113,9 +114,7 @@ function OnboardingPage() {
     <div className="min-h-screen bg-background px-4 py-12">
       <div className="max-w-lg mx-auto space-y-8">
         <header className="text-center space-y-2">
-          <div className="h-12 w-12 mx-auto border border-foreground grid place-items-center font-serif text-3xl">
-            R
-          </div>
+          <Logo size="lg" className="mx-auto" />
           <h1 className="font-serif text-3xl">Welcome to your studio</h1>
           <p className="text-sm text-muted-foreground">A couple of details and you're in.</p>
         </header>

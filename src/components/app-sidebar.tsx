@@ -1,4 +1,5 @@
 import { APP_NAME } from "@/lib/app-config";
+import { Logo } from "@/components/logo";
 import { useState } from "react";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
@@ -93,6 +94,7 @@ const sections: Section[] = [
     children: [
       { title: "Connections", url: "/conexiones" },
       { title: "Automations", url: "/automations" },
+      { title: "Feedback & Reviews", url: "/feedback" },
     ],
   },
 ];
@@ -142,9 +144,7 @@ export function AppSidebar() {
           to="/"
           className={`flex items-center gap-3 group overflow-hidden ${collapsed ? "justify-center" : ""}`}
         >
-          <div className="h-9 w-9 shrink-0 border border-foreground grid place-items-center font-serif text-2xl leading-none">
-            <span className="-mt-0.5">R</span>
-          </div>
+          <Logo size="md" className="shrink-0" />
           {!collapsed && (
             <div className="flex flex-col leading-none gap-1 min-w-0">
               <span className="font-serif text-xl truncate">{APP_NAME}</span>
